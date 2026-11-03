@@ -41,3 +41,23 @@ Previous `index.html`, `teams.html` and `attendance.html` pages are browser-loca
 
 ## Local development
 Use `npm install` then `npx vercel dev` (after configuring local environment variables securely). The frontend is static; the custom backend is at `/api/backend?action=status`. Health check returns `configured:false` until all required server settings are present.
+
+## Neon CLI bootstrap (November 3, 2026)
+The project is linked to Neon organization `org-red-band-02488899`, project `holy-mode-96172980`, branch `production`. The generated `.neon` and `neon.ts` files are committed.
+
+```bash
+npm install
+npm i -g neon@latest
+neon login
+neon deploy
+neon env pull
+npm run build
+npm test
+npm run start
+```
+
+`neon init -y --org-id org-red-band-02488899 --project-id holy-mode-96172980 --branch production --services postgres` has already run successfully. `neon deploy` is still blocked by interactive Neon authentication, so no live database migration, registration or payment testing has been completed. After you sign in through Neon, rerun deploy and check the generated environment file. Do **not** commit `.env.local` or `.env`.
+
+The custom Node backend uses the PostgreSQL `pg` connection pool with `DATABASE_URL`; connect it to the Neon **pooled** connection string on serverless Vercel. Never use a browser-exposed database connection string. A successful Neon service deployment still requires applying `database/schema.sql` and configuring `SESSION_SECRET`, `REGISTRATION_CODE` and the optional one-time `ADMIN_SETUP_KEY` as private Vercel environment variables.
+
+Build/test commands validate static screens, backend syntax, fail-closed APIs and a local HTTP smoke test; they are **not** proof of real Neon database transactions or member sign-ins until the authenticated service exists.
