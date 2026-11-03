@@ -61,3 +61,18 @@ npm run start
 The custom Node backend uses the PostgreSQL `pg` connection pool with `DATABASE_URL`; connect it to the Neon **pooled** connection string on serverless Vercel. Never use a browser-exposed database connection string. A successful Neon service deployment still requires applying `database/schema.sql` and configuring `SESSION_SECRET`, `REGISTRATION_CODE` and the optional one-time `ADMIN_SETUP_KEY` as private Vercel environment variables.
 
 Build/test commands validate static screens, backend syntax, fail-closed APIs and a local HTTP smoke test; they are **not** proof of real Neon database transactions or member sign-ins until the authenticated service exists.
+
+## Verified deployment and tests — November 3, 2026
+
+- The approved PostgreSQL schema migration is applied to Neon project `holy-mode-96172980`, branch `production`, database `neondb`.
+- Vercel production project `elevate-office-tracking-system` has an encrypted pooled `DATABASE_URL` for Neon plus randomly generated `SESSION_SECRET`, `REGISTRATION_CODE`, and `ADMIN_SETUP_KEY`. No secrets are stored in the repository.
+- Vercel output directory is `dist`; last successful deployment confirmed `READY` at `https://elevate-office-tracking-system-juic4f1fe.vercel.app`.
+- Public domain check at `https://office-gas-contributions-tracker.vercel.app`: member.html HTTP 200, API status HTTP 200 with configured=true, health HTTP 200 with database=connected and schemaReady=true, anonymous /me HTTP 401.
+- `npm run build` passed and `npm test` passed 3/3.
+- End-to-end test on **isolated Neon branch `elevate-e2e-test-20261103`** passed registration, admin role creation, teams, sponsor/downlines, member profile, Fiverr link add/delete, admin-only rank and payment writes, payment dues and outstanding reporting, logout/login, unknown login rejection, anonymous access denial and cross-origin POST rejection. Run with `node tests/e2e.mjs` using **test-branch** `DATABASE_URL`, `SESSION_SECRET`, `REGISTRATION_CODE`, and `ADMIN_SETUP_KEY`.
+- The test branch has two synthetic members, one synthetic team and one test payment. Production still has **zero members, zero teams, zero payments**; do not mistake test records for office data. The separate test branch can be deleted after owner approval.
+
+### Before real office users register
+The registration and administrator setup codes on Vercel are **randomly generated**. Replace `REGISTRATION_CODE` and `ADMIN_SETUP_KEY` in Vercel's private project environment settings with fresh codes you control, then redeploy. Never place codes in the website source or share them publicly. Register your own first administrator with both codes. After confirming it works, remove `ADMIN_SETUP_KEY` and redeploy.
+
+The earlier browser-local finance, teams and GPS attendance pages have not been migrated. They remain separate prototypes. Do not treat GPS attendance as server-verified.
