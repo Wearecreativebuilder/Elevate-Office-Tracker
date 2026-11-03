@@ -31,6 +31,10 @@ export default async function handler(req,res){
  if(req.method==='POST'&&(!sameOrigin(req)||!String(req.headers['content-type']||'').toLowerCase().startsWith('application/json')))return fail(res,403,'Invalid request origin or content type');
  try{
   const db=getPool(),body=req.body&&typeof req.body==='object'?req.body:{};
+  if(action==='health'&&req.method==='GET'){
+    const result=await db.query("select current_database() as name, to_regclass('public.members') is not null as members_ready, to_regclass('public.payments') is not null as payments_ready");
+    return res.status(200).json({database:'connected',schemaReady:!!(result.rows[0]?.members_ready&&result.rows[0]?.payments_ready)});
+  }
   if(action==='register'&&req.method==='POST'){
    const name=String(body.name||'').trim(),email=String(body.email||'').trim().toLowerCase(),password=String(body.password||'');
    if(name.length<2||name.length>90||!/^\S+@\S+\.\S+$/.test(email)||email.length>254||password.length<12||password.length>128)return fail(res,400,'Provide your name, a valid email and a password of at least 12 characters.');
