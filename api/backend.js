@@ -205,6 +205,61 @@ export default async function handler(req,res){
   }
   if(action==='team-list'&&req.method==='GET'){const list=await db.query('select id,name,leader_id from teams order by name');return res.json({teams:list.rows})}
   if(!m.is_admin)return fail(res,403,'Administrator access required.');
+
+  if(action==='admin-member-details'&&req.method==='GET'){
+   const id=String(req.query.id||'');
+   if(!/^[0-9a-f-]{36}$/i.test(id))return fail(res,400,'Invalid member identifier.');
+   const [member,payments,attendance,accounts,audits]=await Promise.all([
+    db.query('select id,name,email,phone,rank,team_id,sponsor_id,sponsor_code,is_admin,approval_status,created_at from members where id=$1',[id]),
+    db.query('select id,paid_on,for_month,amount,notes,created_at from payments where member_id=$1 order by paid_on desc limit 100',[id]),
+    db.query('select id,office_date,kind,checked_at,is_test,location_status,accuracy_m,distance_m,admin_note from attendance_records where member_id=$1 order by checked_at desc limit 100',[id]),
+    db.query('select id,label,url from member_fiverr_accounts where member_id=$1 order by created_at desc limit 50',[id]),
+    db.query('select id,action,reason,created_at from admin_audit_log where member_id=$1 order by created_at desc limit 25',[id])
+   ]);
+   if(!member.rowCount)return fail(res,404,'Member not found.');
+   return res.json({member:member.rows[0],payments:payments.rows,attendance:attendance.rows,accounts:accounts.rows,audits:audits.rows});
+  }
+  if(action==='admin-member-update'&&req.method==='POST'){
+   const id=String(body.id||''),name=String(body.name||'').trim(),email=String(body.email||'').trim().toLowerCase(),phone=String(body.phone||'').trim(),rank=String(body.rank||''),teamId=body.teamId?String(body.teamId):null,reason=String(body.reason||'').trim();
+   if(!/^[0-9a-f-]{36}$/i.test(id)||name.length<2||name.length>90||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||email.length>254||phone.length>30||!statuses.includes(rank)||(teamId&&!/^[0-9a-f-]{36}$/i.test(teamId))||reason.length>300)return fail(res,400,'Invalid member update.');
+   const client=await db.connect();
+   try{
+    await client.query('begin');
+    const before=await client.query('select id,name,email,phone,rank,team_id,is_admin from members where id=$1 for update',[id]);
+    if(!before.rowCount){await client.query('rollback');return fail(res,404,'Member not found.')}
+    if(teamId){const t=await client.query('select id from teams where id=$1',[teamId]);if(!t.rowCount){await client.query('rollback');return fail(res,400,'Team not found.')}}
+    const after=await client.query('update members set name=$2,email=$3,phone=$4,rank=$5,team_id=$6 where id=$1 returning id,name,email,phone,rank,team_id,is_admin',[id,name,email,phone,rank,teamId]);
+    await client.query('insert into admin_audit_log(admin_id,member_id,action,record_id,old_values,new_values,reason) values($1,$2,$3,$4,$5,$6,$7)',[uid,id,'member_update',id,JSON.stringify(before.rows[0]),JSON.stringify(after.rows[0]),reason]);
+    await client.query('commit');
+    return res.json({member:after.rows[0]});
+   }catch(e){await client.query('rollback');if(e.code==='23505')return fail(res,409,'This email is already in use.');throw e}finally{client.release()}
+  }
+  if(action==='admin-payment-correct'&&req.method==='POST'){
+   const id=String(body.id||''),amount=Number(body.amount),paidOn=String(body.paidOn||''),forMonth=String(body.forMonth||''),notes=String(body.notes||'').trim(),reason=String(body.reason||'').trim();
+   if(!/^[0-9a-f-]{36}$/i.test(id)||!Number.isFinite(amount)||amount<=0||amount>100000000||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(paidOn)||!/^[0-9]{4}-[0-9]{2}$/.test(forMonth)||notes.length>300||reason.length<8||reason.length>300)return fail(res,400,'Enter valid payment details and a correction reason of at least eight characters.');
+   const client=await db.connect();
+   try{
+    await client.query('begin');
+    const old=await client.query('select id,member_id,amount,paid_on,for_month,notes from payments where id=$1 for update',[id]);
+    if(!old.rowCount){await client.query('rollback');return fail(res,404,'Payment not found.')}
+    const updated=await client.query('update payments set amount=$2,paid_on=$3,for_month=$4,notes=$5 where id=$1 returning id,member_id,amount,paid_on,for_month,notes',[id,Math.round(amount*100)/100,paidOn,forMonth+'-01',notes]);
+    await client.query('insert into admin_audit_log(admin_id,member_id,action,record_id,old_values,new_values,reason) values($1,$2,$3,$4,$5,$6,$7)',[uid,old.rows[0].member_id,'payment_correction',id,JSON.stringify(old.rows[0]),JSON.stringify(updated.rows[0]),reason]);
+    await client.query('commit');return res.json({payment:updated.rows[0]});
+   }catch(e){await client.query('rollback');throw e}finally{client.release()}
+  }
+  if(action==='admin-attendance-note'&&req.method==='POST'){
+   const id=String(body.id||''),note=String(body.note||'').trim();
+   if(!/^[0-9a-f-]{36}$/i.test(id)||note.length<8||note.length>300)return fail(res,400,'Provide an attendance correction note of 8–300 characters.');
+   const client=await db.connect();
+   try{
+    await client.query('begin');
+    const previous=await client.query('select id,member_id,admin_note from attendance_records where id=$1 for update',[id]);
+    if(!previous.rowCount){await client.query('rollback');return fail(res,404,'Attendance record not found.')}
+    const after=await client.query('update attendance_records set admin_note=$2 where id=$1 returning id,member_id,admin_note',[id,note]);
+    await client.query('insert into admin_audit_log(admin_id,member_id,action,record_id,old_values,new_values,reason) values($1,$2,$3,$4,$5,$6,$7)',[uid,previous.rows[0].member_id,'attendance_note',id,JSON.stringify(previous.rows[0]),JSON.stringify(after.rows[0]),note]);
+    await client.query('commit');return res.json({record:after.rows[0]});
+   }catch(e){await client.query('rollback');throw e}finally{client.release()}
+  }
   if(action==='admin-pending'&&req.method==='GET'){
    const rows=await db.query("select id,name,email,rank,sponsor_id,created_at from members where approval_status='pending' order by created_at asc limit 200");
    return res.json({requests:rows.rows});
@@ -218,7 +273,7 @@ export default async function handler(req,res){
    return res.json({member:result.rows[0]});
   }
   if(action==='admin-members'&&req.method==='GET'){
-   const rows=await db.query("select id,name,email,rank,team_id,sponsor_id,approval_status,created_at from members where approval_status='approved' order by created_at desc limit 500");
+   const rows=await db.query("select id,name,email,phone,rank,team_id,sponsor_id,is_admin,approval_status,created_at from members where approval_status='approved' order by created_at desc limit 500");
    return res.json({members:rows.rows});
   }
   if(action==='admin-rank'&&req.method==='POST'){
