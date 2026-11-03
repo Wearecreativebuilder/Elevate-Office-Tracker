@@ -1,0 +1,45 @@
+import assert from 'node:assert/strict';
+import {randomBytes} from 'node:crypto';
+
+const base=process.env.E2E_BASE_URL||'http://127.0.0.1:38765';
+const code=process.env.REGISTRATION_CODE,adminKey=process.env.ADMIN_SETUP_KEY;
+if(!code||!adminKey||!process.env.DATABASE_URL)throw Error('E2E requires a configured isolated test database and registration/admin secrets.');
+const unique=randomBytes(6).toString('hex'),password='E2e!'+randomBytes(24).toString('hex');
+const email1='elevate-e2e-admin-'+unique+'@example.invalid';
+const email2='elevate-e2e-member-'+unique+'@example.invalid';
+async function request(action,{method='GET',body,cookie,origin}={}){
+ const headers={};
+ if(method==='POST')headers['content-type']='application/json';
+ if(cookie)headers.cookie=cookie;
+ if(origin)headers.origin=origin;
+ const response=await fetch(base+'/api/backend?action='+encodeURIComponent(action),{method,headers,body:method==='POST'?JSON.stringify(body||{}):undefined});
+ const json=await response.json();
+ return {status:response.status,data:json,cookie:response.headers.get('set-cookie')?.split(';')[0]||''};
+}
+function good(r,status,title){assert.equal(r.status,status,title+': '+JSON.stringify(r.data));console.log('PASS',title,'HTTP',status)}
+const health=await request('health');good(health,200,'Neon health');assert.equal(health.data.schemaReady,true);
+good(await request('me'),401,'Anonymous access blocked');
+good(await request('register',{method:'POST',body:{name:'Not Allowed',email:'fake@example.invalid',password,registrationCode:'incorrect'}}),403,'Invalid registration code blocked');
+good(await request('login',{method:'POST',body:{email:'bad@example.invalid',password}}),401,'Unknown credentials rejected');
+const admin=await request('register',{method:'POST',body:{name:'E2E Test Admin',email:email1,password,registrationCode:code,adminSetupKey:adminKey}});
+good(admin,201,'Admin account registration');assert.equal(admin.data.member.isAdmin,true);
+const aCookie=admin.cookie;assert.ok(aCookie.includes('elevate_session='));
+const self=await request('me',{cookie:aCookie});good(self,200,'Admin session');assert.equal(self.data.member.rank,'Member');
+const team=await request('admin-team',{method:'POST',cookie:aCookie,body:{name:'E2E Test Team '+unique}});good(team,201,'Admin creates team');
+const member=await request('register',{method:'POST',body:{name:'E2E Test Member',email:email2,password,registrationCode:code,sponsorCode:admin.data.member.sponsorCode}});good(member,201,'Member account registration');
+const mCookie=member.cookie;
+good(await request('admin-rank',{method:'POST',cookie:mCookie,body:{id:member.data.member.id,rank:'Director',teamId:team.data.team.id}}),403,'Member cannot self-promote');
+const memberProfile=await request('profile',{method:'POST',cookie:mCookie,body:{name:'E2E Test Member Updated',phone:'+2348000000000'}});good(memberProfile,200,'Member edits personal profile');
+const account=await request('fiverr-add',{method:'POST',cookie:mCookie,body:{label:'Test public profile',url:'https://www.fiverr.com/example_test'}});good(account,201,'Member saves public Fiverr link');
+good(await request('fiverr-delete',{method:'POST',cookie:mCookie,body:{id:account.data.account.id}}),200,'Member removes own Fiverr link');
+good(await request('admin-rank',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,rank:'Manager',teamId:team.data.team.id}}),200,'Admin assigns manager rank/team');
+const nowParts=new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Africa/Lagos'}).formatToParts(new Date()),pick=n=>nowParts.find(x=>x.type===n).value,month=pick('year')+'-'+pick('month'),date=month+'-'+pick('day');
+good(await request('admin-payment',{method:'POST',cookie:aCookie,body:{memberId:member.data.member.id,amount:3000,paidOn:date,forMonth:month,notes:'E2E TEST ONLY'}}),201,'Admin records verified payment');
+const memberInfo=await request('me',{cookie:mCookie});good(memberInfo,200,'Member dashboard loads shared records');
+assert.equal(memberInfo.data.member.rank,'Manager');assert.equal(memberInfo.data.teamName,team.data.team.name);assert.equal(memberInfo.data.sponsorName,'E2E Test Admin');assert.equal(memberInfo.data.expected,10000);assert.equal(memberInfo.data.received,3000);assert.equal(memberInfo.data.outstanding,7000);assert.equal(memberInfo.data.accounts.length,0);assert.equal(memberInfo.data.payments.length,1);
+const adminInfo=await request('me',{cookie:aCookie});good(adminInfo,200,'Admin downlines updated');assert.equal(adminInfo.data.totalDownlines,1);
+good(await request('logout',{method:'POST',cookie:mCookie}),200,'Member logout');
+const login=await request('login',{method:'POST',body:{email:email2,password}});good(login,200,'Member password login');
+good(await request('me',{cookie:login.cookie}),200,'Login session accesses personal records');
+good(await request('profile',{method:'POST',cookie:login.cookie,origin:'https://untrusted.example',body:{name:'Injected',phone:''}}),403,'Cross-site POST blocked');
+console.log('ALL E2E CHECKS PASSED (test data exists only in isolated Neon test branch)');
