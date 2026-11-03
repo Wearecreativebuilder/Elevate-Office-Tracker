@@ -94,6 +94,31 @@ export default async function handler(req,res){
    if(!settingsResult.rowCount)return fail(res,503,'Attendance configuration has not been initialized.');
    const settings=settingsResult.rows[0],clock=attendanceClock();
    const config={officeConfigured:settings.office_lat!==null&&settings.office_lng!==null,radiusMeters:settings.radius_m,scheduleEnforced:settings.schedule_enforced,testMode:settings.test_mode,officeLatitude:settings.office_lat,officeLongitude:settings.office_lng,officeTimeZone:'Africa/Lagos'};
+   if(action==='attendance-daily'&&req.method==='GET'){
+    const date=clock.date;
+    const [rows,history]=await Promise.all([
+     db.query("select kind,checked_at,is_test,location_status,accuracy_m,distance_m from attendance_records where member_id=$1 and office_date=$2 order by checked_at",[uid,date]),
+     db.query("select office_date, min(checked_at) filter (where kind='checkin') as checkin_at, max(checked_at) filter (where kind='checkout') as checkout_at, bool_or(is_test) as is_test from attendance_records where member_id=$1 group by office_date order by office_date desc limit 14",[uid])
+    ]);
+    const entry=rows.rows.find(x=>x.kind==='checkin')||null,exit=rows.rows.find(x=>x.kind==='checkout')||null;
+    return res.json({date,timeZone:'Africa/Lagos',checkin:entry,checkout:exit,status:exit?'checked_out':entry?'checked_in':'not_checked_in',history:history.rows,mode:settings.test_mode?'test':'live'});
+   }
+   if(action==='attendance-admin-daily'&&req.method==='GET'){
+    if(!m.is_admin)return fail(res,403,'Administrator access required.');
+    const requested=req.query.date?String(req.query.date):clock.date;
+    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(requested)||!Number.isFinite(Date.parse(requested+'T00:00:00Z'))||new Date(requested+'T00:00:00Z').toISOString().slice(0,10)!==requested)return fail(res,400,'Enter a valid date (YYYY-MM-DD).');
+    const roster=await db.query(`select m.id,m.name,m.email,m.rank,
+      ci.checked_at as checkin_at,ci.is_test as checkin_test,ci.location_status as checkin_location_status,
+      co.checked_at as checkout_at,co.is_test as checkout_test,
+      case when co.id is not null then 'checked_out' when ci.id is not null then 'checked_in' else 'not_checked_in' end as status
+      from members m
+      left join attendance_records ci on ci.member_id=m.id and ci.office_date=$1 and ci.kind='checkin'
+      left join attendance_records co on co.member_id=m.id and co.office_date=$1 and co.kind='checkout'
+      where m.approval_status='approved'
+      order by case when ci.id is not null then 0 else 1 end,m.name`,[requested]);
+    const members=roster.rows,checkedIn=members.filter(x=>x.checkin_at).length,checkedOut=members.filter(x=>x.checkout_at).length;
+    return res.json({date:requested,timeZone:'Africa/Lagos',testMode:settings.test_mode,totals:{approvedMembers:members.length,checkedIn,checkedOut,notCheckedIn:members.length-checkedIn,testCheckins:members.filter(x=>x.checkin_at&&x.checkin_test).length},members});
+   }
    if(action==='attendance-info'&&req.method==='GET'){
     const mine=await db.query("select id,kind,checked_at,office_date,accuracy_m,distance_m,within_radius,is_test,location_status from attendance_records where member_id=$1 order by checked_at desc limit 40",[uid]);
     return res.json({config,windowOpen:attendanceWindow(clock),officeDate:clock.date,records:mine.rows,member:{name:m.name,isAdmin:m.is_admin}});
