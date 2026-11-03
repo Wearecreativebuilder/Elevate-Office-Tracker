@@ -116,3 +116,15 @@ https://office-gas-contributions-tracker.vercel.app/attendance.html
 - "No check-in recorded" must not be represented as an established absence during test mode. GPS readings are not independent proof of office presence.
 
 **Verification:** `npm run build` passed; `npm test` passed (3/3); isolated Neon `elevate_daily_e2e_final` end-to-end suite passed all checks, including member update, admin daily aggregates and denied non-admin access. Deployment `dpl_j3pmtTW4CViuos25qhbKjAyuyf5J` READY. Live member page HTTP 200 and new UI elements present, database health HTTP 200, unauthenticated attendance-summary APIs HTTP 401. Production check-ins were not modified by the test.
+
+## Administrator dashboard and audited member editing — November 3, 2026
+
+The login account role is separate from office rank. The dashboard heading and badge now read **Administrator dashboard** and **Administrator** for `members.is_admin=true`; a separate badge explicitly says **Office rank: [rank]** (which may still be Member). Updating the office rank never removes administrator access.
+
+The **Manage all member records** panel in `member.html` allows an administrator to choose any approved member, including their own administrator account, edit name/email/phone/rank/team, and review per-member payments, attendance, public Fiverr profiles, and a correction history. Passwords and `is_admin` cannot be edited through this panel. Payment amount/date/month/notes corrections require a reason, and attendance corrections use an annotation only: recorded check-in timestamps/GPS positions remain immutable.
+
+The new admin-only API actions are `admin-member-details`, `admin-member-update`, `admin-payment-correct`, and `admin-attendance-note`. Old and new values are transactionally recorded in `admin_audit_log`, including changes made through the existing `admin-rank` roster action. Access control is enforced by the server, not only by frontend controls.
+
+Schema: `database/2026-11-03-admin-record-audit.sql` applied to Neon production. No existing member or financial records were deleted.
+
+Verification: 3/3 automated tests passed; extensive isolated Neon E2E tests passed for member and admin access, self-profile editing, audited payments, immutable attendance comments and previous functionality. Deployments `dpl_7nBZBe3wmrsmtXnTansNoxDTDWo7` and finalized `dpl_9ZxtCywvtYLhHmiEAXsGukKMATRM` READY, live member page serves new controls, Neon health returns connected/schemaReady. GPS testing and disabled attendance time restrictions remain unchanged.
