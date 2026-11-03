@@ -44,6 +44,23 @@ const nowParts=new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',d
 good(await request('admin-payment',{method:'POST',cookie:aCookie,body:{memberId:member.data.member.id,amount:3000,paidOn:date,forMonth:month,notes:'E2E TEST ONLY'}}),201,'Admin records verified payment');
 const memberInfo=await request('me',{cookie:mCookie});good(memberInfo,200,'Member dashboard loads shared records');
 assert.equal(memberInfo.data.member.rank,'Manager');assert.equal(memberInfo.data.teamName,team.data.team.name);assert.equal(memberInfo.data.sponsorName,'E2E Test Admin');assert.equal(memberInfo.data.expected,10000);assert.equal(memberInfo.data.received,3000);assert.equal(memberInfo.data.outstanding,7000);assert.equal(memberInfo.data.accounts.length,0);assert.equal(memberInfo.data.payments.length,1);
+
+const attendanceInfo=await request('attendance-info',{cookie:mCookie});good(attendanceInfo,200,'Approved member reads attendance settings');assert.equal(attendanceInfo.data.config.testMode,true);assert.equal(attendanceInfo.data.config.scheduleEnforced,false);
+good(await request('attendance-info'),401,'Anonymous attendance access blocked');
+good(await request('attendance-location-test',{method:'POST',cookie:mCookie,body:{latitude:6.5244,longitude:3.3792,accuracy:18}}),200,'GPS testing works without office coordinates');
+good(await request('attendance-settings',{method:'POST',cookie:mCookie,body:{officeLatitude:6.5244,officeLongitude:3.3792,radiusMeters:150,testMode:true,scheduleEnforced:false}}),403,'Members cannot change office GPS settings');
+good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{officeLatitude:6.5244,officeLongitude:3.3792,radiusMeters:150,testMode:true,scheduleEnforced:false}}),200,'Admin configures shared GPS reference');
+const gpsResult=await request('attendance-location-test',{method:'POST',cookie:mCookie,body:{latitude:6.5244,longitude:3.3792,accuracy:18}});good(gpsResult,200,'GPS distance assessment');assert.equal(gpsResult.data.withinRadius,true);
+const checkin=await request('attendance-checkin',{method:'POST',cookie:mCookie,body:{latitude:6.53,longitude:3.39,accuracy:25}});good(checkin,201,'Test mode allows out-of-radius check-in outside schedule');assert.equal(checkin.data.record.is_test,true);assert.equal(checkin.data.record.within_radius,false);
+good(await request('attendance-checkin',{method:'POST',cookie:mCookie,body:{latitude:6.5244,longitude:3.3792,accuracy:18}}),409,'Duplicate same-day check-in blocked');
+const checkout=await request('attendance-checkout',{method:'POST',cookie:mCookie,body:{latitude:6.5244,longitude:3.3792,accuracy:18}});good(checkout,201,'Member checks out with location');assert.equal(checkout.data.record.kind,'checkout');
+good(await request('attendance-checkout',{method:'POST',cookie:mCookie,body:{latitude:6.5244,longitude:3.3792,accuracy:18}}),409,'Duplicate checkout blocked');
+const attendanceAdmin=await request('attendance-admin',{cookie:aCookie});good(attendanceAdmin,200,'Admin reads member attendance');assert.ok(attendanceAdmin.data.records.some(r=>r.id===checkin.data.record.id));
+good(await request('attendance-admin',{cookie:mCookie}),403,'Member cannot inspect office-wide attendance');
+good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{officeLatitude:6.5244,officeLongitude:3.3792,radiusMeters:150,testMode:false,scheduleEnforced:false}}),200,'Admin can switch off test mode');
+good(await request('attendance-checkin',{method:'POST',cookie:aCookie,body:{latitude:6.53,longitude:3.39,accuracy:25}}),403,'Live mode rejects out-of-radius attendance');
+good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{officeLatitude:6.5244,officeLongitude:3.3792,radiusMeters:150,testMode:true,scheduleEnforced:false}}),200,'Admin restores temporary GPS test mode');
+
 const adminInfo=await request('me',{cookie:aCookie});good(adminInfo,200,'Admin downlines updated');assert.equal(adminInfo.data.totalDownlines,1);
 good(await request('logout',{method:'POST',cookie:mCookie}),200,'Member logout');
 const login=await request('login',{method:'POST',body:{email:email2,password}});good(login,200,'Member password login');
