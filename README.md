@@ -28,3 +28,28 @@ Members profiles, verified registration/login, sponsors, teams/downlines/success
 - Members have ₦0 dues (exempt); Distributors and Managers ₦10,000/month; Senior Managers, Executive Managers, Directors and Emirald Directors ₦25,000/month.
 - Attendance: Monday–Thursday 11:30–16:00 WAT, Friday 14:30–16:00 WAT, weekends closed; geolocation precision checks are not dependable indoor proof of proximity.
 - Secure registration, member portals, private personal/contact details, and cross-device synchronization require database-backed authentication and access control.
+
+
+## Member authentication and self-service portal (requires Supabase)
+The member portal lives at `/member.html`. It is **not live for account registration until Supabase is configured**. Authentication is handled by Supabase Auth; passwords are never stored in the frontend or Git repository.
+
+### Setup
+1. Create or connect a Supabase project, and run `supabase/schema.sql` in its SQL Editor.
+2. In Vercel project settings → Environment Variables, configure `SUPABASE_URL` (https://PROJECT.supabase.co) and `SUPABASE_ANON_KEY` (the browser-safe Supabase publishable / anon key). **Never** use or expose the service-role key.
+3. Add the Vercel production domain and `https://YOUR_DOMAIN/member.html` to Supabase Auth URL Configuration / Redirect URLs, then redeploy the Vercel project.
+4. Register a member with their own email and password; confirm email if enabled. Use a verified sponsor code after sign-in.
+5. For the office owner, after creating their auth account, execute the documented one-time admin SQL in `supabase/schema.sql` directly in Supabase SQL Editor.
+
+### Member capabilities
+- Login/logout and email/password account registration, provider-managed password storage and optional email confirmation.
+- Edit own name and private phone number.
+- View own monthly dues and verified finance entries, attendance summaries, assigned team and sponsor.
+- View the non-sensitive member directory and direct/recursive downline totals.
+- Add/remove their own public Fiverr profile URLs.
+
+### Important boundaries
+- Public member registration should be restricted by invitations or approval before rollout to the whole office. Supabase default open sign-up creates accounts for any visitor unless disabled / restricted.
+- RLS restricts phone records and account links to their owners; rank, team and verified finance data are management-owned.
+- Existing finance, attendance and downline records use browser localStorage and are **not** automatically migrated to Supabase. The secure portal starts with empty verified records until data is migrated by an administrator.
+- The previous `index.html`, `attendance.html` and `teams.html` prototypes are **not secure member portals**. Do not enter sensitive data into those pages.
+- Precise 2-metre attendance requires a server-verified check-in workflow and suitable location technology; the legacy browser-only attendance page is not tamper resistant.
