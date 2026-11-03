@@ -221,7 +221,7 @@ export default async function handler(req,res){
   }
   if(action==='admin-member-update'&&req.method==='POST'){
    const id=String(body.id||''),name=String(body.name||'').trim(),email=String(body.email||'').trim().toLowerCase(),phone=String(body.phone||'').trim(),rank=String(body.rank||''),teamId=body.teamId?String(body.teamId):null,reason=String(body.reason||'').trim();
-   if(!/^[0-9a-f-]{36}$/i.test(id)||name.length<2||name.length>90||!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)||email.length>254||phone.length>30||!statuses.includes(rank)||(teamId&&!/^[0-9a-f-]{36}$/i.test(teamId))||reason.length>300)return fail(res,400,'Invalid member update.');
+   if(!/^[0-9a-f-]{36}$/i.test(id)||name.length<2||name.length>90||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)||email.length>254||phone.length>30||!statuses.includes(rank)||(teamId&&!/^[0-9a-f-]{36}$/i.test(teamId))||reason.length>300)return fail(res,400,'Invalid member update.');
    const client=await db.connect();
    try{
     await client.query('begin');
@@ -280,7 +280,16 @@ export default async function handler(req,res){
    const {id,rank,teamId}=body;if(!statuses.includes(rank))return fail(res,400,'Invalid office rank.');
    if(!/^[0-9a-f-]{36}$/i.test(String(id)))return fail(res,400,'Invalid member ID.');
    if(teamId&& !/^[0-9a-f-]{36}$/i.test(String(teamId)))return fail(res,400,'Invalid team.');
-   await db.query('update members set rank=$2,team_id=$3 where id=$1',[id,rank,teamId||null]);return res.json({ok:true});
+   const client=await db.connect();
+   try{
+    await client.query('begin');
+    const before=await client.query('select id,rank,team_id from members where id=$1 for update',[id]);
+    if(!before.rowCount){await client.query('rollback');return fail(res,404,'Member not found.')}
+    if(teamId){const team=await client.query('select 1 from teams where id=$1',[teamId]);if(!team.rowCount){await client.query('rollback');return fail(res,400,'Team not found.')}}
+    const after=await client.query('update members set rank=$2,team_id=$3 where id=$1 returning id,rank,team_id',[id,rank,teamId||null]);
+    await client.query('insert into admin_audit_log(admin_id,member_id,action,record_id,old_values,new_values,reason) values($1,$2,$3,$4,$5,$6,$7)',[uid,id,'rank_team_update',id,JSON.stringify(before.rows[0]),JSON.stringify(after.rows[0]),'Admin roster update']);
+    await client.query('commit');return res.json({ok:true});
+   }catch(e){await client.query('rollback');throw e}finally{client.release()}
   }
   if(action==='admin-team'&&req.method==='POST'){
    const name=String(body.name||'').trim();if(name.length<2||name.length>90)return fail(res,400,'Invalid team name.');
