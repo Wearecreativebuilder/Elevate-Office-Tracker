@@ -105,3 +105,14 @@ https://office-gas-contributions-tracker.vercel.app/attendance.html
 **Verification:** `npm run build` passed, `npm test` passed 3/3, and the isolated Neon database `elevate_attendance_e2e` passed all end-to-end API checks. Production deployment `dpl_6TnwxtsvWQqD2L243pcHQNwK95Uu` is READY, attendance page HTTP 200, database health HTTP 200, unauthenticated attendance-info HTTP 401. Confirmed production flags by read-only SQL: schedule_enforced=false, test_mode=true, office_configured=false, radius_m=150.
 
 **Note:** Browser GPS location permission cannot be tested in the server sandbox. Perform a real phone/browser location test at the office and review the accuracy and distance before enabling official attendance. Consider location anti-spoofing, audit logs and a robust presence verification method before relying on this for consequential decisions.
+
+## Daily attendance dashboards — November 3, 2026
+
+**Production:** `https://office-gas-contributions-tracker.vercel.app/member.html` now shows:
+
+- **Member:** today's attendance status, check-in/check-out time (Africa/Lagos), mode (TEST or live), and 14 recent attendance days.
+- **Administrator:** date-selectable roster of approved members with check-in/check-out times, rank, status, test/live label, and counters for approved members, checked in, checked out, and no check-in recorded. The list is visible only to administrators.
+- Server API uses `GET /api/backend?action=attendance-daily` and admin-only `GET /api/backend?action=attendance-admin-daily&date=YYYY-MM-DD`. Both use the existing Neon attendance tables, without further migrations. Attendance date calculations are in Africa/Lagos time.
+- "No check-in recorded" must not be represented as an established absence during test mode. GPS readings are not independent proof of office presence.
+
+**Verification:** `npm run build` passed; `npm test` passed (3/3); isolated Neon `elevate_daily_e2e_final` end-to-end suite passed all checks, including member update, admin daily aggregates and denied non-admin access. Deployment `dpl_j3pmtTW4CViuos25qhbKjAyuyf5J` READY. Live member page HTTP 200 and new UI elements present, database health HTTP 200, unauthenticated attendance-summary APIs HTTP 401. Production check-ins were not modified by the test.
