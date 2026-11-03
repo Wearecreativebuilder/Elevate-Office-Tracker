@@ -54,7 +54,7 @@ good(await request('admin-payment-correct',{method:'POST',cookie:aCookie,body:{i
 good(await request('admin-payment-correct',{method:'POST',cookie:mCookie,body:{id:memberDetails.payments[0].id,amount:5000,paidOn:date,forMonth:month,notes:'Tampering',reason:'Attempted alteration'}}),403,'Non-admin payment edit denied');
 
 const memberInfo=await request('me',{cookie:mCookie});good(memberInfo,200,'Member dashboard loads shared records');
-assert.equal(memberInfo.data.member.rank,'Manager');assert.equal(memberInfo.data.teamName,team.data.team.name);assert.equal(memberInfo.data.sponsorName,'E2E Test Admin');assert.equal(memberInfo.data.expected,10000);assert.equal(memberInfo.data.received,3000);assert.equal(memberInfo.data.outstanding,7000);assert.equal(memberInfo.data.accounts.length,0);assert.equal(memberInfo.data.payments.length,1);
+assert.equal(memberInfo.data.member.rank,'Manager');assert.equal(memberInfo.data.teamName,team.data.team.name);assert.equal(memberInfo.data.sponsorName,'E2E Administrator Updated');assert.equal(memberInfo.data.expected,10000);assert.equal(memberInfo.data.received,3000);assert.equal(memberInfo.data.outstanding,7000);assert.equal(memberInfo.data.accounts.length,0);assert.equal(memberInfo.data.payments.length,1);
 
 const dailyBefore=await request('attendance-daily',{cookie:mCookie});good(dailyBefore,200,'Member daily attendance initial state');assert.equal(dailyBefore.data.status,'not_checked_in');
 good(await request('attendance-admin-daily',{cookie:mCookie}),403,'Non-admin daily office roster blocked');
