@@ -76,3 +76,15 @@ Build/test commands validate static screens, backend syntax, fail-closed APIs an
 The registration and administrator setup codes on Vercel are **randomly generated**. Replace `REGISTRATION_CODE` and `ADMIN_SETUP_KEY` in Vercel's private project environment settings with fresh codes you control, then redeploy. Never place codes in the website source or share them publicly. Register your own first administrator with both codes. After confirming it works, remove `ADMIN_SETUP_KEY` and redeploy.
 
 The earlier browser-local finance, teams and GPS attendance pages have not been migrated. They remain separate prototypes. Do not treat GPS attendance as server-verified.
+
+## Administrator approval registration — November 3, 2026
+
+The live member portal at https://office-gas-contributions-tracker.vercel.app/member.html now uses administrator-approved registration instead of a shared office code. New member records start as `pending` and cannot log in or access protected routes until approved. Existing members remain `approved`. Rejected registrations cannot log in.
+
+The Office Administration page displays **Pending member requests** with Approve and Reject actions. The API offers authenticated admin-only `GET admin-pending` and `POST admin-review` actions. Decisions record `reviewed_at` and `reviewed_by`. The regular approved-member roster excludes pending applicants.
+
+Schema change: `database/2026-11-03-admin-approval.sql` (applied to Neon production). Existing administrator remains approved.
+
+Verification: `npm run build` and `npm test` passed; 29 end-to-end integration checks passed against an isolated Neon branch and separate test database `elevate_approval_e2e`. The new production Vercel deployment `dpl_CC3Cm2W1a95ujoiS9GwSSq4RneQC` is READY. Live member page and API status/health returned HTTP 200; anonymous member endpoint returned HTTP 401.
+
+`REGISTRATION_CODE` is now unused and can be removed from Vercel. Continue protecting `DATABASE_URL` and `SESSION_SECRET`; `ADMIN_SETUP_KEY` should remain absent. Recommended follow-ups: email verification, public signup rate limiting, and admin email alerts. There are currently no push/email approval notifications; use the admin dashboard to review requests.
