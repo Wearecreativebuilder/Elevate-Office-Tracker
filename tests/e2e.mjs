@@ -40,8 +40,19 @@ const memberProfile=await request('profile',{method:'POST',cookie:mCookie,body:{
 const account=await request('fiverr-add',{method:'POST',cookie:mCookie,body:{label:'Test public profile',url:'https://www.fiverr.com/example_test'}});good(account,201,'Member saves public Fiverr link');
 good(await request('fiverr-delete',{method:'POST',cookie:mCookie,body:{id:account.data.account.id}}),200,'Member removes own Fiverr link');
 good(await request('admin-rank',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,rank:'Manager',teamId:team.data.team.id}}),200,'Admin assigns manager rank/team');
+
+const recordUpdate=await request('admin-member-update',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,name:'E2E Managed Member',email:email2,phone:'+2348111111111',rank:'Manager',teamId:team.data.team.id,reason:'Update office record'}});good(recordUpdate,200,'Admin updates member profile');assert.equal(recordUpdate.data.member.name,'E2E Managed Member');
+good(await request('admin-member-update',{method:'POST',cookie:mCookie,body:{id:member.data.member.id,name:'Unauthorized',email:email2,rank:'Manager'}}),403,'Non-admin member update denied');
+const ownAdminUpdate=await request('admin-member-update',{method:'POST',cookie:aCookie,body:{id:admin.data.member.id,name:'E2E Administrator Updated',email:email1,phone:'+2348111111111',rank:'Member',teamId:null,reason:'Edit administrator profile'}});good(ownAdminUpdate,200,'Administrator updates own profile');assert.equal(ownAdminUpdate.data.member.is_admin,true);
+
 const nowParts=new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Africa/Lagos'}).formatToParts(new Date()),pick=n=>nowParts.find(x=>x.type===n).value,month=pick('year')+'-'+pick('month'),date=month+'-'+pick('day');
 good(await request('admin-payment',{method:'POST',cookie:aCookie,body:{memberId:member.data.member.id,amount:3000,paidOn:date,forMonth:month,notes:'E2E TEST ONLY'}}),201,'Admin records verified payment');
+
+const memberDetails=await fetch(base+'/api/backend?action=admin-member-details&id='+member.data.member.id,{headers:{cookie:aCookie}}).then(r=>r.json());
+assert.equal(memberDetails.member.name,'E2E Managed Member');assert.equal(memberDetails.payments.length,1);
+good(await request('admin-payment-correct',{method:'POST',cookie:aCookie,body:{id:memberDetails.payments[0].id,amount:3000,paidOn:date,forMonth:month,notes:'Verified corrected memo',reason:'Correct receipt description'}}),200,'Admin audits payment correction');
+good(await request('admin-payment-correct',{method:'POST',cookie:mCookie,body:{id:memberDetails.payments[0].id,amount:5000,paidOn:date,forMonth:month,notes:'Tampering',reason:'Attempted alteration'}}),403,'Non-admin payment edit denied');
+
 const memberInfo=await request('me',{cookie:mCookie});good(memberInfo,200,'Member dashboard loads shared records');
 assert.equal(memberInfo.data.member.rank,'Manager');assert.equal(memberInfo.data.teamName,team.data.team.name);assert.equal(memberInfo.data.sponsorName,'E2E Test Admin');assert.equal(memberInfo.data.expected,10000);assert.equal(memberInfo.data.received,3000);assert.equal(memberInfo.data.outstanding,7000);assert.equal(memberInfo.data.accounts.length,0);assert.equal(memberInfo.data.payments.length,1);
 
@@ -63,6 +74,15 @@ const memberDaily=await request('attendance-daily',{cookie:mCookie});good(member
 const officeDaily=await request('attendance-admin-daily',{cookie:aCookie});good(officeDaily,200,'Admin daily rollup reflects member attendance');assert.equal(officeDaily.data.totals.approvedMembers,2);assert.equal(officeDaily.data.totals.checkedIn,1);assert.equal(officeDaily.data.totals.checkedOut,1);assert.equal(officeDaily.data.totals.notCheckedIn,1);assert.equal(officeDaily.data.totals.testCheckins,1);
 const chosenMember=officeDaily.data.members.find(x=>x.id===member.data.member.id);assert.equal(chosenMember.status,'checked_out');assert.equal(chosenMember.checkin_test,true);
 const unknownDate=await request('attendance-admin-daily',{cookie:aCookie,origin:'https://other.example'});assert.equal(unknownDate.status,200);
+
+
+good(await request('admin-attendance-note',{method:'POST',cookie:mCookie,body:{id:checkin.data.record.id,note:'Unauthorized attendance correction'}}),403,'Non-admin attendance edits denied');
+good(await request('admin-attendance-note',{method:'POST',cookie:aCookie,body:{id:checkin.data.record.id,note:'Administrator reviewed GPS testing entry'}}),200,'Admin appends audit-backed attendance note');
+const editedDetails=await fetch(base+'/api/backend?action=admin-member-details&id='+member.data.member.id,{headers:{cookie:aCookie}}).then(r=>r.json());
+assert.equal(editedDetails.attendance.find(x=>x.id===checkin.data.record.id).admin_note,'Administrator reviewed GPS testing entry');
+assert.ok(editedDetails.audits.some(x=>x.action==='member_update'));
+assert.ok(editedDetails.audits.some(x=>x.action==='payment_correction'));
+assert.ok(editedDetails.audits.some(x=>x.action==='attendance_note'));
 
 const attendanceAdmin=await request('attendance-admin',{cookie:aCookie});good(attendanceAdmin,200,'Admin reads member attendance');assert.ok(attendanceAdmin.data.records.some(r=>r.id===checkin.data.record.id));
 good(await request('attendance-admin',{cookie:mCookie}),403,'Member cannot inspect office-wide attendance');
