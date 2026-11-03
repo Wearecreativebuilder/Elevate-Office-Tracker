@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import {randomBytes} from 'node:crypto';
 
 const base=process.env.E2E_BASE_URL||'http://127.0.0.1:38765';
-const code=process.env.REGISTRATION_CODE,adminKey=process.env.ADMIN_SETUP_KEY;
-if(!code||!adminKey||!process.env.DATABASE_URL)throw Error('E2E requires a configured isolated test database and registration/admin secrets.');
+const adminKey=process.env.ADMIN_SETUP_KEY;
+if(!adminKey||!process.env.DATABASE_URL)throw Error('E2E requires an isolated test database and admin bootstrap key.');
 const unique=randomBytes(6).toString('hex'),password='E2e!'+randomBytes(24).toString('hex');
 const email1='elevate-e2e-admin-'+unique+'@example.invalid';
 const email2='elevate-e2e-member-'+unique+'@example.invalid';
@@ -19,15 +19,22 @@ async function request(action,{method='GET',body,cookie,origin}={}){
 function good(r,status,title){assert.equal(r.status,status,title+': '+JSON.stringify(r.data));console.log('PASS',title,'HTTP',status)}
 const health=await request('health');good(health,200,'Neon health');assert.equal(health.data.schemaReady,true);
 good(await request('me'),401,'Anonymous access blocked');
-good(await request('register',{method:'POST',body:{name:'Not Allowed',email:'fake@example.invalid',password,registrationCode:'incorrect'}}),403,'Invalid registration code blocked');
+good(await request('admin-pending'),401,'Anonymous pending queue blocked');
 good(await request('login',{method:'POST',body:{email:'bad@example.invalid',password}}),401,'Unknown credentials rejected');
-const admin=await request('register',{method:'POST',body:{name:'E2E Test Admin',email:email1,password,registrationCode:code,adminSetupKey:adminKey}});
+const admin=await request('register',{method:'POST',body:{name:'E2E Test Admin',email:email1,password,adminSetupKey:adminKey}});
 good(admin,201,'Admin account registration');assert.equal(admin.data.member.isAdmin,true);
 const aCookie=admin.cookie;assert.ok(aCookie.includes('elevate_session='));
 const self=await request('me',{cookie:aCookie});good(self,200,'Admin session');assert.equal(self.data.member.rank,'Member');
 const team=await request('admin-team',{method:'POST',cookie:aCookie,body:{name:'E2E Test Team '+unique}});good(team,201,'Admin creates team');
-const member=await request('register',{method:'POST',body:{name:'E2E Test Member',email:email2,password,registrationCode:code,sponsorCode:admin.data.member.sponsorCode}});good(member,201,'Member account registration');
-const mCookie=member.cookie;
+const member=await request('register',{method:'POST',body:{name:'E2E Test Member',email:email2,password,sponsorCode:admin.data.member.sponsorCode}});good(member,201,'Member account registration');
+assert.equal(member.data.pendingApproval,true);assert.equal(member.data.member.approvalStatus,'pending');assert.equal(member.cookie,'');
+good(await request('login',{method:'POST',body:{email:email2,password}}),403,'Pending member cannot login');
+const queue=await request('admin-pending',{cookie:aCookie});good(queue,200,'Admin views pending applications');assert.ok(queue.data.requests.some(m=>m.id===member.data.member.id));
+good(await request('admin-review',{method:'POST',body:{id:member.data.member.id,decision:'approved'}}),401,'Anonymous approval blocked');
+good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved'}}),200,'Admin approves new applicant');
+good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved'}}),409,'Duplicate approval blocked');
+const memberSession=await request('login',{method:'POST',body:{email:email2,password}});good(memberSession,200,'Approved member can login');
+const mCookie=memberSession.cookie;
 good(await request('admin-rank',{method:'POST',cookie:mCookie,body:{id:member.data.member.id,rank:'Director',teamId:team.data.team.id}}),403,'Member cannot self-promote');
 const memberProfile=await request('profile',{method:'POST',cookie:mCookie,body:{name:'E2E Test Member Updated',phone:'+2348000000000'}});good(memberProfile,200,'Member edits personal profile');
 const account=await request('fiverr-add',{method:'POST',cookie:mCookie,body:{label:'Test public profile',url:'https://www.fiverr.com/example_test'}});good(account,201,'Member saves public Fiverr link');
@@ -41,5 +48,9 @@ const adminInfo=await request('me',{cookie:aCookie});good(adminInfo,200,'Admin d
 good(await request('logout',{method:'POST',cookie:mCookie}),200,'Member logout');
 const login=await request('login',{method:'POST',body:{email:email2,password}});good(login,200,'Member password login');
 good(await request('me',{cookie:login.cookie}),200,'Login session accesses personal records');
+const rejectedEmail='elevate-e2e-rejected-'+unique+'@example.invalid';
+const rejected=await request('register',{method:'POST',body:{name:'Rejected Applicant',email:rejectedEmail,password}});good(rejected,201,'Additional member applies');
+good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:rejected.data.member.id,decision:'rejected'}}),200,'Admin rejects applicant');
+good(await request('login',{method:'POST',body:{email:rejectedEmail,password}}),403,'Rejected member cannot login');
 good(await request('profile',{method:'POST',cookie:login.cookie,origin:'https://untrusted.example',body:{name:'Injected',phone:''}}),403,'Cross-site POST blocked');
 console.log('ALL E2E CHECKS PASSED (test data exists only in isolated Neon test branch)');
