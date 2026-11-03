@@ -112,7 +112,7 @@ export default async function handler(req,res){
   if(action==='fiverr-delete'&&req.method==='POST'){const id=String(body.id||'');if(!/^[0-9a-f-]{36}$/i.test(id))return fail(res,400,'Invalid account ID.');await db.query('delete from member_fiverr_accounts where id=$1 and member_id=$2',[id,uid]);return res.json({ok:true})}
   if(action==='sponsor'&&req.method==='POST'){
    if(m.sponsor_id)return fail(res,409,'Sponsor is already assigned.');
-   const code=String(body.sponsorCode||'').trim().toUpperCase(),sponsor=await db.query('select id from members where sponsor_code=$1 and approval_status='approved'',[code]);
+   const code=String(body.sponsorCode||'').trim().toUpperCase(),sponsor=await db.query("select id from members where sponsor_code=$1 and approval_status='approved'",[code]);
    if(!sponsor.rowCount||sponsor.rows[0].id===uid)return fail(res,400,'Sponsor code invalid.');
    const candidate=sponsor.rows[0].id;
    const cyc=await db.query(`with recursive chain as (select id,sponsor_id,array[id] path from members where id=$1 union all select m.id,m.sponsor_id,chain.path||m.id from members m join chain on m.id=chain.sponsor_id where not m.id=any(chain.path)) select 1 from chain where id=$2 limit 1`,[candidate,uid]);
