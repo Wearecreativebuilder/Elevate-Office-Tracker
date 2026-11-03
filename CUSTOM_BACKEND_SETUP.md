@@ -88,3 +88,20 @@ Schema change: `database/2026-11-03-admin-approval.sql` (applied to Neon product
 Verification: `npm run build` and `npm test` passed; 29 end-to-end integration checks passed against an isolated Neon branch and separate test database `elevate_approval_e2e`. The new production Vercel deployment `dpl_CC3Cm2W1a95ujoiS9GwSSq4RneQC` is READY. Live member page and API status/health returned HTTP 200; anonymous member endpoint returned HTTP 401.
 
 `REGISTRATION_CODE` is now unused and can be removed from Vercel. Continue protecting `DATABASE_URL` and `SESSION_SECRET`; `ADMIN_SETUP_KEY` should remain absent. Recommended follow-ups: email verification, public signup rate limiting, and admin email alerts. There are currently no push/email approval notifications; use the admin dashboard to review requests.
+
+## Neon GPS attendance testing — November 3, 2026
+
+The attendance prototype was replaced by a secure Neon-backed attendance page:
+https://office-gas-contributions-tracker.vercel.app/attendance.html
+
+**Production flags:** `attendance_settings.schedule_enforced=false` and `test_mode=true`. Time rules are intentionally OFF so members may test location permission and check in/out at any time, including weekends. Every recorded test entry is visibly marked TEST and must not be treated as confirmed office presence. Existing normal schedule remains available: Monday–Thursday 11:30 AM–4:00 PM WAT; Friday 2:30 PM–4:00 PM WAT; weekends closed.
+
+**GPS configuration:** The actual office coordinates are NOT SET. A signed-in administrator must physically visit the office, open the attendance page, click Capture current office location, confirm the coordinate quality and Save office settings. A 150m radius is configured by default. Until coordinates are saved, the GPS test returns `location_captured` with no distance reading. Test check-ins still save to Neon without confirming office proximity. Browser-provided GPS coordinates can be spoofed and are not tamper-proof proof of presence.
+
+**Authenticated API:** `attendance-info`, `attendance-location-test`, `attendance-checkin`, `attendance-checkout`, admin-only `attendance-admin` and `attendance-settings`. The backend uses server WAT date and timestamps, saves lat/lng and estimated accuracy, calculates distance on the server when office coordinates are set, enforces one check-in and one check-out per office date and restricts live non-test attendance to the configured radius. The administrator can enable the original time rules later in the shared settings; save changes to apply to everyone.
+
+**Migration:** `database/2026-11-03-neon-attendance.sql` applied to Neon production. Newly created `attendance_settings` table and enriched `attendance_records` rows. No prior browser-local data was migrated.
+
+**Verification:** `npm run build` passed, `npm test` passed 3/3, and the isolated Neon database `elevate_attendance_e2e` passed all end-to-end API checks. Production deployment `dpl_6TnwxtsvWQqD2L243pcHQNwK95Uu` is READY, attendance page HTTP 200, database health HTTP 200, unauthenticated attendance-info HTTP 401. Confirmed production flags by read-only SQL: schedule_enforced=false, test_mode=true, office_configured=false, radius_m=150.
+
+**Note:** Browser GPS location permission cannot be tested in the server sandbox. Perform a real phone/browser location test at the office and review the accuracy and distance before enabling official attendance. Consider location anti-spoofing, audit logs and a robust presence verification method before relying on this for consequential decisions.
