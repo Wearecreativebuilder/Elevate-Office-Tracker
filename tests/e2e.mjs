@@ -45,6 +45,10 @@ good(await request('admin-payment',{method:'POST',cookie:aCookie,body:{memberId:
 const memberInfo=await request('me',{cookie:mCookie});good(memberInfo,200,'Member dashboard loads shared records');
 assert.equal(memberInfo.data.member.rank,'Manager');assert.equal(memberInfo.data.teamName,team.data.team.name);assert.equal(memberInfo.data.sponsorName,'E2E Test Admin');assert.equal(memberInfo.data.expected,10000);assert.equal(memberInfo.data.received,3000);assert.equal(memberInfo.data.outstanding,7000);assert.equal(memberInfo.data.accounts.length,0);assert.equal(memberInfo.data.payments.length,1);
 
+const dailyBefore=await request('attendance-daily',{cookie:mCookie});good(dailyBefore,200,'Member daily attendance initial state');assert.equal(dailyBefore.data.status,'not_checked_in');
+good(await request('attendance-admin-daily',{cookie:mCookie}),403,'Non-admin daily office roster blocked');
+const emptyRoster=await request('attendance-admin-daily',{cookie:aCookie});good(emptyRoster,200,'Admin daily roster before check-in');assert.equal(emptyRoster.data.totals.checkedIn,0);assert.equal(emptyRoster.data.totals.approvedMembers,2);
+good(await request('attendance-admin-daily',{cookie:aCookie,origin:'https://other.example'}),200,'Read-only daily roster available to admin');
 const attendanceInfo=await request('attendance-info',{cookie:mCookie});good(attendanceInfo,200,'Approved member reads attendance settings');assert.equal(attendanceInfo.data.config.testMode,true);assert.equal(attendanceInfo.data.config.scheduleEnforced,false);
 good(await request('attendance-info'),401,'Anonymous attendance access blocked');
 good(await request('attendance-location-test',{method:'POST',cookie:mCookie,body:{latitude:6.5244,longitude:3.3792,accuracy:18}}),200,'GPS testing works without office coordinates');
@@ -55,6 +59,11 @@ const checkin=await request('attendance-checkin',{method:'POST',cookie:mCookie,b
 good(await request('attendance-checkin',{method:'POST',cookie:mCookie,body:{latitude:6.5244,longitude:3.3792,accuracy:18}}),409,'Duplicate same-day check-in blocked');
 const checkout=await request('attendance-checkout',{method:'POST',cookie:mCookie,body:{latitude:6.5244,longitude:3.3792,accuracy:18}});good(checkout,201,'Member checks out with location');assert.equal(checkout.data.record.kind,'checkout');
 good(await request('attendance-checkout',{method:'POST',cookie:mCookie,body:{latitude:6.5244,longitude:3.3792,accuracy:18}}),409,'Duplicate checkout blocked');
+const memberDaily=await request('attendance-daily',{cookie:mCookie});good(memberDaily,200,'Daily member dashboard reflects both events');assert.equal(memberDaily.data.status,'checked_out');assert.ok(memberDaily.data.checkin);assert.ok(memberDaily.data.checkout);assert.ok(memberDaily.data.history.some(x=>x.is_test));
+const officeDaily=await request('attendance-admin-daily',{cookie:aCookie});good(officeDaily,200,'Admin daily rollup reflects member attendance');assert.equal(officeDaily.data.totals.approvedMembers,2);assert.equal(officeDaily.data.totals.checkedIn,1);assert.equal(officeDaily.data.totals.checkedOut,1);assert.equal(officeDaily.data.totals.notCheckedIn,1);assert.equal(officeDaily.data.totals.testCheckins,1);
+const chosenMember=officeDaily.data.members.find(x=>x.id===member.data.member.id);assert.equal(chosenMember.status,'checked_out');assert.equal(chosenMember.checkin_test,true);
+const unknownDate=await request('attendance-admin-daily',{cookie:aCookie,origin:'https://other.example'});assert.equal(unknownDate.status,200);
+
 const attendanceAdmin=await request('attendance-admin',{cookie:aCookie});good(attendanceAdmin,200,'Admin reads member attendance');assert.ok(attendanceAdmin.data.records.some(r=>r.id===checkin.data.record.id));
 good(await request('attendance-admin',{cookie:mCookie}),403,'Member cannot inspect office-wide attendance');
 good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{officeLatitude:6.5244,officeLongitude:3.3792,radiusMeters:150,testMode:false,scheduleEnforced:false}}),200,'Admin can switch off test mode');
