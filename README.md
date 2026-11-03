@@ -18,3 +18,13 @@ This is a **single-browser prototype** using localStorage, not secure multiuser 
 
 ## Planned Phase 2+
 Members profiles, verified registration/login, sponsors, teams/downlines/success lines, attendance, Fiverr accounts, audit logs, role-based access.
+## Teams & downlines (Phase 2 prototype)
+- Open `teams.html` to add members, create teams, appoint team leaders and assign members to teams.
+- Each office member can have one direct sponsor/upline; direct and recursive downline counts and a hierarchy tree are calculated automatically.
+- Sponsor links are intentionally unset for the two initial office members. Circular sponsorship and self-sponsorship are blocked.
+- Exports: member/team CSV and sponsorship network CSV.
+- **Team leadership is not the same as sponsorship.** A member's team and sponsor can be assigned separately.
+- Updates use the existing finance localStorage key, so changes are shared with finance and attendance **only in the same browser and origin**.
+- Members have ₦0 dues (exempt); Distributors and Managers ₦10,000/month; Senior Managers, Executive Managers, Directors and Emirald Directors ₦25,000/month.
+- Attendance: Monday–Thursday 11:30–16:00 WAT, Friday 14:30–16:00 WAT, weekends closed; geolocation precision checks are not dependable indoor proof of proximity.
+- Secure registration, member portals, private personal/contact details, and cross-device synchronization require database-backed authentication and access control.
