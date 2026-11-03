@@ -106,7 +106,7 @@ export default async function handler(req,res){
    if(action==='attendance-admin-daily'&&req.method==='GET'){
     if(!m.is_admin)return fail(res,403,'Administrator access required.');
     const requested=req.query.date?String(req.query.date):clock.date;
-    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(requested)||!Number.isFinite(Date.parse(requested+'T00:00:00Z'))||new Date(requested+'T00:00:00Z').toISOString().slice(0,10)!==requested)return fail(res,400,'Enter a valid date (YYYY-MM-DD).');
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(requested)||!Number.isFinite(Date.parse(requested+'T00:00:00Z'))||new Date(requested+'T00:00:00Z').toISOString().slice(0,10)!==requested)return fail(res,400,'Enter a valid date (YYYY-MM-DD).');
     const roster=await db.query(`select m.id,m.name,m.email,m.rank,
       ci.checked_at as checkin_at,ci.is_test as checkin_test,ci.location_status as checkin_location_status,
       co.checked_at as checkout_at,co.is_test as checkout_test,
