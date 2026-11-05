@@ -279,9 +279,9 @@ export default async function handler(req,res){
    const nowMonth=parts.find(x=>x.type==='year').value+'-'+parts.find(x=>x.type==='month').value;
    const month=String(req.query.month||nowMonth);
    if(!/^\d{4}-\d{2}$/.test(month)||Number(month.slice(5))<1||Number(month.slice(5))>12)return fail(res,400,'Choose a valid YYYY-MM month.');
-   const r=await db.query(`select m.id,m.name,m.email,m.rank,m.is_admin,override.amount as custom_amount,coalesce(p.total,0) as paid
+   const r=await db.query(`select m.id,m.name,m.email,m.rank,m.is_admin,mr.amount as custom_amount,coalesce(p.total,0) as paid
      from members m
-     left join monthly_responsibilities override on override.member_id=m.id and override.month=$1::date
+     left join monthly_responsibilities mr on mr.member_id=m.id and mr.month=$1::date
      left join lateral (select coalesce(sum(amount),0) as total from payments where member_id=m.id and for_month=$1::date) p on true
      where m.approval_status='approved' order by m.name`,[month+'-01']);
    const members=r.rows.map(x=>{const amount=x.custom_amount!==null?Number(x.custom_amount):roleDue(x.rank),paid=Number(x.paid),state=responsibility(amount,paid);return{id:x.id,name:x.name,email:x.email,rank:x.rank,isAdmin:x.is_admin,expected:amount,paid,outstanding:amount===null?null:Math.max(0,amount-paid),status:state.status,required:state.required,source:x.custom_amount!==null?'monthly_override':'office_rank'}});
