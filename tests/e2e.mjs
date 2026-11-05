@@ -30,11 +30,13 @@ const member=await request('register',{method:'POST',body:{name:'E2E Test Member
 assert.equal(member.data.pendingApproval,true);assert.equal(member.data.member.approvalStatus,'pending');assert.equal(member.cookie,'');
 good(await request('login',{method:'POST',body:{email:email2,password}}),403,'Pending member cannot login');
 const queue=await request('admin-pending',{cookie:aCookie});good(queue,200,'Admin views pending applications');assert.ok(queue.data.requests.some(m=>m.id===member.data.member.id));
-good(await request('admin-review',{method:'POST',body:{id:member.data.member.id,decision:'approved'}}),401,'Anonymous approval blocked');
+good(await request('admin-review',{method:'POST',body:{id:member.data.member.id,decision:'approved',rank:'Distributor'}}),401,'Anonymous approval blocked');
 good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved'}}),200,'Admin approves new applicant');
 good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved'}}),409,'Duplicate approval blocked');
+const dueAfterApproval=await request('admin-responsibilities',{cookie:aCookie});good(dueAfterApproval,200,'Admin sees automatic office responsibility after approval');const assigned=dueAfterApproval.data.members.find(x=>x.id===member.data.member.id);assert.equal(assigned.rank,'Distributor');assert.equal(assigned.expected,10000);assert.equal(assigned.required,true);assert.equal(assigned.status,'due');assert.equal(dueAfterApproval.data.members.find(x=>x.id===admin.data.member.id).status,'exempt');
 const memberSession=await request('login',{method:'POST',body:{email:email2,password}});good(memberSession,200,'Approved member can login');
 const mCookie=memberSession.cookie;
+good(await request('admin-responsibilities',{cookie:mCookie}),403,'Non-admin cannot inspect payment obligations of all members');
 good(await request('admin-rank',{method:'POST',cookie:mCookie,body:{id:member.data.member.id,rank:'Director',teamId:team.data.team.id}}),403,'Member cannot self-promote');
 const memberProfile=await request('profile',{method:'POST',cookie:mCookie,body:{name:'E2E Test Member Updated',phone:'+2348000000000'}});good(memberProfile,200,'Member edits personal profile');
 const account=await request('fiverr-add',{method:'POST',cookie:mCookie,body:{label:'Test public profile',url:'https://www.fiverr.com/example_test'}});good(account,201,'Member saves public Fiverr link');
@@ -48,13 +50,14 @@ const ownAdminUpdate=await request('admin-member-update',{method:'POST',cookie:a
 const nowParts=new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Africa/Lagos'}).formatToParts(new Date()),pick=n=>nowParts.find(x=>x.type===n).value,month=pick('year')+'-'+pick('month'),date=month+'-'+pick('day');
 good(await request('admin-payment',{method:'POST',cookie:aCookie,body:{memberId:member.data.member.id,amount:3000,paidOn:date,forMonth:month,notes:'E2E TEST ONLY'}}),201,'Admin records verified payment');
 
+const reportAfterPayment=await request('admin-responsibilities',{cookie:aCookie});good(reportAfterPayment,200,'Admin responsibility overview includes recorded payments');const memberSummary=reportAfterPayment.data.members.find(x=>x.id===member.data.member.id);assert.equal(memberSummary.paid,3000);assert.equal(memberSummary.outstanding,7000);assert.equal(memberSummary.status,'partially_paid');
 const memberDetails=await fetch(base+'/api/backend?action=admin-member-details&id='+member.data.member.id,{headers:{cookie:aCookie}}).then(r=>r.json());
 assert.equal(memberDetails.member.name,'E2E Managed Member');assert.equal(memberDetails.payments.length,1);
 good(await request('admin-payment-correct',{method:'POST',cookie:aCookie,body:{id:memberDetails.payments[0].id,amount:3000,paidOn:date,forMonth:month,notes:'Verified corrected memo',reason:'Correct receipt description'}}),200,'Admin audits payment correction');
 good(await request('admin-payment-correct',{method:'POST',cookie:mCookie,body:{id:memberDetails.payments[0].id,amount:5000,paidOn:date,forMonth:month,notes:'Tampering',reason:'Attempted alteration'}}),403,'Non-admin payment edit denied');
 
 const memberInfo=await request('me',{cookie:mCookie});good(memberInfo,200,'Member dashboard loads shared records');
-assert.equal(memberInfo.data.member.rank,'Manager');assert.equal(memberInfo.data.teamName,team.data.team.name);assert.equal(memberInfo.data.sponsorName,'E2E Administrator Updated');assert.equal(memberInfo.data.expected,10000);assert.equal(memberInfo.data.received,3000);assert.equal(memberInfo.data.outstanding,7000);assert.equal(memberInfo.data.accounts.length,0);assert.equal(memberInfo.data.payments.length,1);
+assert.equal(memberInfo.data.member.rank,'Manager');assert.equal(memberInfo.data.teamName,team.data.team.name);assert.equal(memberInfo.data.sponsorName,'E2E Administrator Updated');assert.equal(memberInfo.data.expected,10000);assert.equal(memberInfo.data.responsibility.required,true);assert.equal(memberInfo.data.responsibility.status,'partially_paid');assert.equal(memberInfo.data.received,3000);assert.equal(memberInfo.data.outstanding,7000);assert.equal(memberInfo.data.accounts.length,0);assert.equal(memberInfo.data.payments.length,1);
 
 const dailyBefore=await request('attendance-daily',{cookie:mCookie});good(dailyBefore,200,'Member daily attendance initial state');assert.equal(dailyBefore.data.status,'not_checked_in');
 good(await request('attendance-admin-daily',{cookie:mCookie}),403,'Non-admin daily office roster blocked');
