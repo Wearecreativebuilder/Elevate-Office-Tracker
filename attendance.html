@@ -102,26 +102,65 @@ label input[type=checkbox]{width:auto!important;display:inline-block!important}
 @media(max-width:760px){header nav{width:100%;flex-wrap:nowrap;overflow:auto}main{padding:18px 12px!important}.grid{grid-template-columns:1fr!important}.cards{grid-template-columns:repeat(2,minmax(0,1fr))!important}.metric{padding:15px!important}.card .actions{display:grid;grid-template-columns:1fr 1fr}.card .actions button{width:100%}}
 @media(max-width:440px){.cards{grid-template-columns:1fr!important}.card .actions{grid-template-columns:1fr}.card .actions button{width:100%}}
 
+
+/* Attendance calendar */
+.calendar-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;flex-wrap:wrap}
+.calendar-head h2{margin:0 0 5px}.calendar-head p{margin:0 0 12px}
+.calendar-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.calendar-actions button{font-size:24px;min-width:45px;min-height:43px;padding:3px 10px}
+.calendar-actions input{width:180px;margin:0;min-height:43px}
+.calendar-legend{display:flex;gap:14px;flex-wrap:wrap;margin:16px 0 12px;font-size:12px;color:var(--e-muted)}
+.calendar-legend span{display:inline-flex;align-items:center;gap:6px}
+.legend-circle{width:11px;height:11px;border-radius:50%;display:inline-block;border:1px solid transparent}
+.legend-circle.green{background:#16a34a}.legend-circle.grey{background:#94a3b8}.legend-circle.amber{background:#eab308}.legend-circle.neutral{background:#e2e8f0;border-color:#94a3b8}
+.attendance-calendar{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:8px}
+.calendar-weekday{text-align:center;font-size:12px;font-weight:800;color:var(--e-muted);padding:6px 1px}
+.calendar-cell{border:1px solid var(--e-border);border-radius:13px;min-height:77px;padding:9px;display:flex;flex-direction:column;justify-content:space-between;gap:4px;background:var(--e-soft);color:var(--e-ink)}
+.calendar-cell.empty{visibility:hidden}
+.calendar-cell .day-num{font-weight:800;font-size:15px}
+.calendar-cell .day-state{font-size:11px;line-height:1.2;font-weight:700}
+.calendar-cell.present{background:#dcfce7;border-color:#86efac;color:#166534}
+.calendar-cell.absent{background:#e5e7eb;border-color:#cbd5e1;color:#334155}
+.calendar-cell.test{background:#fef3c7;border-color:#facc15;color:#854d0e}
+.calendar-cell.today{outline:2px solid #2563eb;outline-offset:1px}
+.calendar-cell.weekend{opacity:.65}
+.calendar-summary{margin:16px 0 8px;padding:12px 14px;border:1px solid var(--e-border);border-radius:12px;color:var(--e-ink);background:var(--e-soft);font-weight:700}
+:root[data-theme="dark"] .calendar-cell.present{background:#133b2c;color:#86efac;border-color:#236b4a}
+:root[data-theme="dark"] .calendar-cell.absent{background:#354359;color:#d1d5db;border-color:#64748b}
+:root[data-theme="dark"] .calendar-cell.test{background:#483a1a;color:#fde68a;border-color:#b45309}
+:root[data-theme="dark"] .calendar-cell:not(.present):not(.absent):not(.test){background:#172943;color:#dbeafe}
+#feedback.success{background:#dcfce7!important;color:#166534!important;border-color:#86efac!important;font-weight:750}
+#feedback.error{background:#fee2e2!important;color:#991b1b!important;border-color:#fca5a5!important;font-weight:750}
+:root[data-theme="dark"] #feedback.success{background:#133b2c!important;color:#86efac!important}
+:root[data-theme="dark"] #feedback.error{background:#4c1d1d!important;color:#fecaca!important}
+@media(max-width:560px){.attendance-calendar{gap:4px}.calendar-cell{min-height:59px;padding:6px 4px;border-radius:9px}.calendar-cell .day-num{font-size:13px}.calendar-cell .day-state{font-size:9px}.calendar-head{display:block}.calendar-actions{margin-top:10px}.calendar-actions input{flex:1;min-width:0}.calendar-legend{gap:7px 11px;font-size:11px}}
 </style></head><body>
 <header><strong>◈ ELEVATE OFFICE TRACKING SYSTEM</strong><nav><a href="./member.html">Member dashboard</a> &nbsp; <a href="./index.html">Finance</a></nav></header>
-<main><h1>Office attendance</h1><p>Secure member check-in and GPS testing · Nigeria (WAT)</p>
-<div id="loading" class="notice">Checking member session and attendance settings…</div>
-<div id="authNeeded" class="card hidden"><h2>Sign in to continue</h2><p>Only approved office members can test location and submit attendance.</p><a href="./member.html">Open member login</a></div>
+<main><h1>Office attendance</h1><p>Sign in during office hours with location verification · Nigeria (WAT)</p>
+<div id="loading" class="notice">Loading your attendance…</div>
+<div id="authNeeded" class="card hidden"><h2>Sign in to continue</h2><p>Sign in to your approved office account to record your attendance.</p><a href="./member.html">Open member login</a></div>
 <div id="content" class="hidden">
 <div class="cards"><div class="metric"><span>Signed-in member</span><b id="myName">—</b></div><div class="metric"><span>Office date (WAT)</span><b id="officeDate">—</b></div><div class="metric"><span>Attendance mode</span><b id="mode">—</b></div></div>
 <div id="modeNotice" class="notice warning"></div>
 <div class="grid">
-<section class="card"><h2>My attendance</h2><p>Use your phone or browser's location permission. A GPS reading is required for attendance; only your account can record your check-in.</p>
-<div class="actions"><button id="gpsTest">Test my GPS location</button><button id="checkin" class="primary">Check in</button><button id="checkout">Check out</button></div>
-<div id="feedback" class="notice">Location has not been tested on this device.</div>
-<p class="hint">Your device supplies GPS coordinates and an estimated accuracy. GPS can be inaccurate or spoofed; a captured position is not proof of physical presence. Check-in and check-out are limited to once each per office day.</p>
+<section class="card"><h2>Sign in to the office</h2><p>Enable precise location on your phone before signing in. Your device must be within the office area during an active office day.</p>
+<div class="actions"><button id="gpsTest">Test my GPS location</button><button id="checkin" class="primary">Sign In</button><button id="checkout">Sign Out</button></div>
+<div id="feedback" class="notice" role="status" aria-live="polite">Check the office schedule and allow precise location to sign in.</div>
+<p class="hint">Office sign-in hours: Monday–Thursday 11:30 AM–4:00 PM and Friday 2:30 PM–4:00 PM. Weekends are closed. One sign-in and one sign-out per day. Your phone's location accuracy may affect verification.</p>
 </section>
-<section class="card"><h2>Office GPS verification</h2><p id="officeDescription">Loading office settings…</p>
+<section class="card"><h2>Office GPS verification</h2><p id="officeDescription">Loading office location…</p>
 <div class="flex"><div><small>GPS accuracy</small><h3 id="accuracy">—</h3></div><div><small>Distance from office</small><h3 id="distance">—</h3></div></div>
 <div><small>GPS assessment</small><h3 id="gpsStatus">Not tested</h3></div>
 <p class="hint">Your browser may ask you to grant location access. Use HTTPS, enable device location services and choose accurate location permission.</p>
 </section>
 </div>
+<section class="card" id="attendanceCalendarPanel"><div class="calendar-head"><div><h2>Attendance calendar</h2><p class="muted">See the days you signed in and the office days you missed.</p></div><div class="calendar-actions"><button type="button" id="calendarPrev" aria-label="Previous month">‹</button><input id="calendarMonth" aria-label="Calendar month" type="month"><button type="button" id="calendarNext" aria-label="Next month">›</button></div></div>
+<div id="calendarAdminControls" class="hidden"><label>View member's calendar<select id="calendarMember"><option value="">My attendance</option></select></label></div>
+<div class="calendar-legend"><span><i class="legend-circle green"></i>Signed in</span><span><i class="legend-circle grey"></i>Absent</span><span><i class="legend-circle amber"></i>Test record</span><span><i class="legend-circle neutral"></i>Not due / closed</span></div>
+<div id="calendarGrid" class="attendance-calendar" role="grid" aria-label="Monthly attendance calendar"></div>
+<div id="calendarSummary" class="calendar-summary" aria-live="polite">Loading attendance calendar…</div>
+<p class="hint">Grey absences appear only for completed office days after verified attendance was activated and the member was approved. Weekends, future days and earlier testing periods are not counted as absent.</p>
+</section>
 <section class="card"><h2>My attendance history</h2><div class="tablewrap"><table><thead><tr><th>Office date</th><th>Action</th><th>Recorded at (WAT)</th><th>Accuracy</th><th>Distance</th><th>Mode / GPS assessment</th></tr></thead><tbody id="myRows"></tbody></table></div></section>
 <section id="admin" class="hidden">
 <div class="grid">
@@ -132,14 +171,14 @@ label input[type=checkbox]{width:auto!important;display:inline-block!important}
 <label><input id="testMode" type="checkbox" style="display:inline-block;width:auto;margin-right:8px" checked>Test mode: save attendance even if outside the office geofence</label>
 <label><input id="scheduleEnforced" type="checkbox" style="display:inline-block;width:auto;margin-right:8px">Enforce office attendance time schedule</label>
 <button class="primary" id="saveSettings">Save office settings</button>
-<div id="settingsMessage" class="notice warning">Schedule enforcement is temporarily disabled for testing.</div>
+<div id="settingsMessage" class="notice warning">Office location must be configured before verified attendance can start.</div>
 <p class="hint">Official attendance must have office coordinates, test mode OFF, and the schedule enabled. These browser-reported coordinates are not independently tamper-proof.</p>
 </section>
-<section class="card"><h2>Admin · Attendance policy</h2>
-<p><b>Current test setup:</b> Check-in and check-out can be recorded outside normal attendance hours. Every entry is labelled TEST, not verified office presence.</p>
+<section class="card"><h2>Admin · Attendance rules</h2>
+<p><b>Office hours:</b> The scheduled office days and hours are enforced when the schedule switch is on. Distance verification requires a saved office location and live mode.</p>
 <p><b>Normal schedule:</b> Monday–Thursday starts 11:30 AM, Friday starts 2:30 PM, weekends closed, and office closes 4:00 PM (Africa/Lagos).</p>
-<p><b>Restore official rules:</b> Capture and save the correct office coordinates, switch off Test mode, enable time schedule enforcement, and save.</p>
-<p>Changes affect all signed-in members because the settings are stored centrally in Neon.</p>
+<p><b>Activate verified attendance:</b> At the physical office, capture and save its coordinates, switch Test mode OFF, keep the office time schedule ON, and save. Until then, test entries are not verified attendance.</p>
+<p>Saved settings apply to every office member.</p>
 </section>
 </div>
 <section class="card"><div class="flex" style="align-items:center"><h2>Admin · Attendance records</h2><button id="refreshAdmin">Refresh records</button></div><div class="tablewrap"><table><thead><tr><th>Member</th><th>Date</th><th>Action</th><th>Time (WAT)</th><th>Accuracy</th><th>Distance</th><th>Status</th></tr></thead><tbody id="adminRows"></tbody></table></div><div class="actions"><button id="downloadCsv">Export attendance CSV</button></div></section>
