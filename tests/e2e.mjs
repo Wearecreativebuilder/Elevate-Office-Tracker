@@ -31,7 +31,7 @@ assert.equal(member.data.pendingApproval,true);assert.equal(member.data.member.a
 good(await request('login',{method:'POST',body:{email:email2,password}}),403,'Pending member cannot login');
 const queue=await request('admin-pending',{cookie:aCookie});good(queue,200,'Admin views pending applications');assert.ok(queue.data.requests.some(m=>m.id===member.data.member.id));
 good(await request('admin-review',{method:'POST',body:{id:member.data.member.id,decision:'approved',rank:'Distributor'}}),401,'Anonymous approval blocked');
-good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved'}}),200,'Admin approves new applicant');
+good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved',rank:'Distributor'}}),200,'Admin approves new applicant');
 good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved'}}),409,'Duplicate approval blocked');
 const dueAfterApproval=await request('admin-responsibilities',{cookie:aCookie});good(dueAfterApproval,200,'Admin sees automatic office responsibility after approval');const assigned=dueAfterApproval.data.members.find(x=>x.id===member.data.member.id);assert.equal(assigned.rank,'Distributor');assert.equal(assigned.expected,10000);assert.equal(assigned.required,true);assert.equal(assigned.status,'due');assert.equal(dueAfterApproval.data.members.find(x=>x.id===admin.data.member.id).status,'exempt');
 const memberSession=await request('login',{method:'POST',body:{email:email2,password}});good(memberSession,200,'Approved member can login');
