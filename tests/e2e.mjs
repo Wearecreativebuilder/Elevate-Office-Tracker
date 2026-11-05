@@ -47,10 +47,11 @@ const mCookie=memberSession.cookie;
 good(await request('admin-due-submissions',{cookie:mCookie}),403,'Distributor cannot review office dues');
 good(await request('office-financial-summary',{cookie:mCookie}),200,'Distributor can view verified office financial totals');
 const initialSelf=await request('me',{cookie:mCookie});assert.equal(initialSelf.data.canViewFinance,true);
-const today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'}),dueMonth=today.slice(0,7),dueReference='E2E-REF-'+unique;
-const claimed=await request('due-submit',{method:'POST',cookie:mCookie,body:{month:dueMonth,paidOn:today,amount:1250,reference:dueReference,note:'E2E submitted transfer'}});good(claimed,201,'Distributor submits payment awaiting approval');
+const today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'}),dueMonth=today.slice(0,7);
+const claimed=await request('due-submit',{method:'POST',cookie:mCookie,body:{month:dueMonth,paidOn:today,amount:1250,note:'E2E submitted transfer'}});good(claimed,201,'Distributor submits payment awaiting approval');
 assert.equal(claimed.data.submission.status,'pending');
-good(await request('due-submit',{method:'POST',cookie:mCookie,body:{month:dueMonth,paidOn:today,amount:1250,reference:dueReference}}),409,'Duplicate reference is blocked');
+assert.ok(!claimed.data.submission.payment_reference,'Member does not need to provide or see a reference');
+good(await request('due-submit',{method:'POST',cookie:mCookie,body:{month:dueMonth,paidOn:'2026-02-30',amount:1250}}),400,'Invalid payment date is rejected');
 const beforeConfirm=await request('me',{cookie:mCookie});assert.equal(beforeConfirm.data.received,0,'Pending claim must not count as verified payment');
 const pendingClaims=await request('admin-due-submissions',{cookie:aCookie});good(pendingClaims,200,'Administrator reviews pending submissions');assert.ok(pendingClaims.data.submissions.some(x=>x.id===claimed.data.submission.id));
 good(await request('admin-due-review',{method:'POST',cookie:mCookie,body:{id:claimed.data.submission.id,decision:'approved'}}),403,'Distributor cannot approve own claim');
@@ -58,7 +59,7 @@ const approvedClaim=await request('admin-due-review',{method:'POST',cookie:aCook
 good(await request('admin-due-review',{method:'POST',cookie:aCookie,body:{id:claimed.data.submission.id,decision:'approved'}}),409,'Second approval cannot duplicate payment');
 const afterConfirm=await request('me',{cookie:mCookie});assert.equal(afterConfirm.data.received,1250,'Only approved claim credits balance');
 const myClaims=await request('my-due-submissions',{cookie:mCookie});good(myClaims,200,'Distributor sees own submission history');assert.equal(myClaims.data.submissions[0].status,'approved');
-const rejectedClaim=await request('due-submit',{method:'POST',cookie:mCookie,body:{month:dueMonth,paidOn:today,amount:500,reference:dueReference+'-rejected'}});good(rejectedClaim,201,'Distributor submits another receipt');
+const rejectedClaim=await request('due-submit',{method:'POST',cookie:mCookie,body:{month:dueMonth,paidOn:today,amount:500}});good(rejectedClaim,201,'Distributor submits another receipt');
 good(await request('admin-due-review',{method:'POST',cookie:aCookie,body:{id:rejectedClaim.data.submission.id,decision:'rejected',note:'Not found in records'}}),200,'Administrator rejects unverified receipt');
 const afterRejection=await request('me',{cookie:mCookie});assert.equal(afterRejection.data.received,1250,'Rejected claim does not affect totals');
 
