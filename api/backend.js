@@ -95,6 +95,11 @@ export default async function handler(req,res){
    if(!settingsResult.rowCount)return fail(res,503,'Attendance configuration has not been initialized.');
    const settings=settingsResult.rows[0],clock=attendanceClock();
    const config={officeConfigured:settings.office_lat!==null&&settings.office_lng!==null,radiusMeters:settings.radius_m,scheduleEnforced:settings.schedule_enforced,testMode:settings.test_mode,officeLatitude:settings.office_lat,officeLongitude:settings.office_lng,officeTimeZone:'Africa/Lagos',liveSince:settings.live_since};
+   if(action==='attendance-calendar-members'&&req.method==='GET'){
+    if(!m.is_admin)return fail(res,403,'Administrator access required.');
+    const r=await db.query("select id,name from members where approval_status='approved' order by name limit 1000");
+    return res.json({members:r.rows});
+   }
    if(action==='attendance-calendar'&&req.method==='GET'){
     const currentMonth=clock.date.slice(0,7),month=String(req.query.month||currentMonth);
     if(!/^\d{4}-\d{2}$/.test(month)||Number(month.slice(5))<1||Number(month.slice(5))>12)return fail(res,400,'Choose a valid calendar month.');
