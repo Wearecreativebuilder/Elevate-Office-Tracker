@@ -44,8 +44,9 @@ export default async function handler(req,res){
     return res.status(200).json({database:'connected',schemaReady:!!(result.rows[0]?.members_ready&&result.rows[0]?.payments_ready)});
   }
   if(action==='register'&&req.method==='POST'){
-   const name=String(body.name||'').trim(),email=String(body.email||'').trim().toLowerCase(),password=String(body.password||'');
+   const name=String(body.name||'').trim(),email=String(body.email||'').trim().toLowerCase(),password=String(body.password||''),requestedRank=String(body.officeStatus||'').trim();
    if(name.length<2||name.length>90||!/^\S+@\S+\.\S+$/.test(email)||email.length>254||password.length<12||password.length>128)return fail(res,400,'Provide your name, a valid email and a password of at least 12 characters.');
+   if(!statuses.includes(requestedRank))return fail(res,400,'Please choose a valid office status before registering.');
    const adminRequested=Boolean(body.adminSetupKey);
    if(adminRequested&&!process.env.ADMIN_SETUP_KEY)return fail(res,403,'Administrator bootstrap is disabled.');
    if(adminRequested&&!safeEq(body.adminSetupKey,process.env.ADMIN_SETUP_KEY))return fail(res,403,'Invalid administrator setup key.');
@@ -60,7 +61,7 @@ export default async function handler(req,res){
    }
    const hash=await bcrypt.hash(password,12),newId=randomUUID(),newSponsorCode=namedSponsorCode(name,newId);
    let created;
-   try{created=await db.query('insert into members(id,name,email,password_hash,sponsor_id,is_admin,approval_status,sponsor_code) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id,name,email,phone,rank,is_admin,team_id,sponsor_id,sponsor_code,approval_status,created_at',[newId,name,email,hash,sponsorId,admin,admin?'approved':'pending',newSponsorCode])}
+   try{created=await db.query('insert into members(id,name,email,password_hash,sponsor_id,is_admin,approval_status,sponsor_code,requested_rank) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) returning id,name,email,phone,rank,requested_rank,is_admin,team_id,sponsor_id,sponsor_code,approval_status,created_at',[newId,name,email,hash,sponsorId,admin,admin?'approved':'pending',newSponsorCode,requestedRank])}
    catch(e){if(e.code==='23505')return fail(res,409,'This email address is already registered.');throw e}
    if(admin)res.setHeader('Set-Cookie',makeCookie(await jwt(created.rows[0].id),604800));
    return res.status(201).json({member:sanitize(created.rows[0]),pendingApproval:!admin,message:admin?'Administrator account created.':'Registration submitted. An administrator must approve your account before you can sign in.'});
@@ -353,7 +354,7 @@ export default async function handler(req,res){
    }catch(e){await client.query('rollback');throw e}finally{client.release()}
   }
   if(action==='admin-pending'&&req.method==='GET'){
-   const rows=await db.query("select id,name,email,rank,sponsor_id,created_at from members where approval_status='pending' order by created_at asc limit 200");
+   const rows=await db.query("select id,name,email,rank,requested_rank,sponsor_id,created_at from members where approval_status='pending' order by created_at asc limit 200");
    return res.json({requests:rows.rows});
   }
   if(action==='admin-review'&&req.method==='POST'){
