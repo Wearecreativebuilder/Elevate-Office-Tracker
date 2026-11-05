@@ -294,6 +294,32 @@ export default async function handler(req,res){
    if(!result.rowCount)return fail(res,409,'This application has already been reviewed or was not found.');
    return res.json({member:result.rows[0],monthlyResponsibility:decision==='approved'?roleDue(result.rows[0].rank):null});
   }
+  if(action==='admin-directory'&&req.method==='GET'){
+   const [members,teams]=await Promise.all([
+    db.query("select id,name,email,phone,rank,team_id,sponsor_id,is_admin,created_at from members where approval_status='approved' order by name limit 2000"),
+    db.query("select id,name,leader_id,created_at from teams order by name limit 500")
+   ]);
+   return res.json({members:members.rows,teams:teams.rows,source:'approved_office_members'});
+  }
+  if(action==='admin-responsibility-set'&&req.method==='POST'){
+   const id=String(body.memberId||''),month=String(body.month||''),reason=String(body.reason||'').trim();
+   const clear=body.amount===null;
+   const amount=Number(body.amount);
+   if(!/^[0-9a-f-]{36}$/i.test(id)||!/^\d{4}-\d{2}$/.test(month)||Number(month.slice(5))<1||Number(month.slice(5))>12||(!clear&&(!Number.isFinite(amount)||amount<0||amount>100000000))||reason.length<8||reason.length>300)
+    return fail(res,400,'Select a valid member, month, nonnegative amount and reason (8–300 characters).');
+   const client=await db.connect();
+   try{
+    await client.query('begin');
+    const beforeMember=await client.query("select id,name,rank from members where id=$1 and approval_status='approved' for update",[id]);
+    if(!beforeMember.rowCount){await client.query('rollback');return fail(res,404,'Approved office member not found.')}
+    const date=month+'-01';
+    const before=await client.query('select amount from monthly_responsibilities where member_id=$1 and month=$2',[id,date]);
+    if(clear)await client.query('delete from monthly_responsibilities where member_id=$1 and month=$2',[id,date]);
+    else await client.query('insert into monthly_responsibilities(member_id,month,amount) values($1,$2,$3) on conflict(member_id,month) do update set amount=excluded.amount',[id,date,Math.round(amount*100)/100]);
+    await client.query('insert into admin_audit_log(admin_id,member_id,action,record_id,old_values,new_values,reason) values($1,$2,$3,$4,$5,$6,$7)',[uid,id,'monthly_responsibility_override',id,JSON.stringify({month,override:before.rows[0]?.amount??null,rank:beforeMember.rows[0].rank}),JSON.stringify({month,override:clear?null:Math.round(amount*100)/100}),reason]);
+    await client.query('commit');return res.json({ok:true,memberId:id,month,customAmount:clear?null:Math.round(amount*100)/100});
+   }catch(e){await client.query('rollback');throw e}finally{client.release()}
+  }
   if(action==='admin-responsibilities'&&req.method==='GET'){
    const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit'}).formatToParts(new Date());
    const nowMonth=parts.find(x=>x.type==='year').value+'-'+parts.find(x=>x.type==='month').value;
