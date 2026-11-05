@@ -40,6 +40,25 @@ const officialDirectory=await request('admin-directory',{cookie:aCookie});good(o
 const dueAfterApproval=await request('admin-responsibilities',{cookie:aCookie});good(dueAfterApproval,200,'Admin sees automatic office responsibility after approval');const assigned=dueAfterApproval.data.members.find(x=>x.id===member.data.member.id);assert.equal(assigned.rank,'Distributor');assert.equal(assigned.expected,10000);assert.equal(assigned.required,true);assert.equal(assigned.status,'due');assert.equal(dueAfterApproval.data.members.find(x=>x.id===admin.data.member.id).status,'exempt');
 const memberSession=await request('login',{method:'POST',body:{email:email2,password}});good(memberSession,200,'Approved member can login');
 const mCookie=memberSession.cookie;
+
+good(await request('admin-due-submissions',{cookie:mCookie}),403,'Distributor cannot review office dues');
+good(await request('office-financial-summary',{cookie:mCookie}),200,'Distributor can view verified office financial totals');
+const initialSelf=await request('me',{cookie:mCookie});assert.equal(initialSelf.data.canViewFinance,true);
+const today=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'}),dueMonth=today.slice(0,7),dueReference='E2E-REF-'+unique;
+const claimed=await request('due-submit',{method:'POST',cookie:mCookie,body:{month:dueMonth,paidOn:today,amount:1250,reference:dueReference,note:'E2E submitted transfer'}});good(claimed,201,'Distributor submits payment awaiting approval');
+assert.equal(claimed.data.submission.status,'pending');
+good(await request('due-submit',{method:'POST',cookie:mCookie,body:{month:dueMonth,paidOn:today,amount:1250,reference:dueReference}}),409,'Duplicate reference is blocked');
+const beforeConfirm=await request('me',{cookie:mCookie});assert.equal(beforeConfirm.data.received,0,'Pending claim must not count as verified payment');
+const pendingClaims=await request('admin-due-submissions',{cookie:aCookie});good(pendingClaims,200,'Administrator reviews pending submissions');assert.ok(pendingClaims.data.submissions.some(x=>x.id===claimed.data.submission.id));
+good(await request('admin-due-review',{method:'POST',cookie:mCookie,body:{id:claimed.data.submission.id,decision:'approved'}}),403,'Distributor cannot approve own claim');
+const approvedClaim=await request('admin-due-review',{method:'POST',cookie:aCookie,body:{id:claimed.data.submission.id,decision:'approved',note:'Verified payment receipt'}});good(approvedClaim,200,'Administrator approves member payment');
+good(await request('admin-due-review',{method:'POST',cookie:aCookie,body:{id:claimed.data.submission.id,decision:'approved'}}),409,'Second approval cannot duplicate payment');
+const afterConfirm=await request('me',{cookie:mCookie});assert.equal(afterConfirm.data.received,1250,'Only approved claim credits balance');
+const myClaims=await request('my-due-submissions',{cookie:mCookie});good(myClaims,200,'Distributor sees own submission history');assert.equal(myClaims.data.submissions[0].status,'approved');
+const rejectedClaim=await request('due-submit',{method:'POST',cookie:mCookie,body:{month:dueMonth,paidOn:today,amount:500,reference:dueReference+'-rejected'}});good(rejectedClaim,201,'Distributor submits another receipt');
+good(await request('admin-due-review',{method:'POST',cookie:aCookie,body:{id:rejectedClaim.data.submission.id,decision:'rejected',note:'Not found in records'}}),200,'Administrator rejects unverified receipt');
+const afterRejection=await request('me',{cookie:mCookie});assert.equal(afterRejection.data.received,1250,'Rejected claim does not affect totals');
+
 good(await request('admin-directory',{cookie:mCookie}),403,'Non-admin directory access blocked');
 good(await request('admin-responsibility-set',{method:'POST',cookie:mCookie,body:{memberId:member.data.member.id,month:'2026-11',amount:0,reason:'Unauthorized override'}}),403,'Non-admin override blocked');
 good(await request('admin-responsibilities',{cookie:mCookie}),403,'Non-admin cannot inspect payment obligations of all members');
@@ -60,14 +79,14 @@ const reportBeforeOverride=await request('admin-responsibilities',{cookie:aCooki
 good(await request('admin-responsibility-set',{method:'POST',cookie:aCookie,body:{memberId:member.data.member.id,month:officeMonth,amount:12500,reason:'Approved temporary adjustment'}}),200,'Admin sets auditable month-specific responsibility');
 const overrideReport=await request('admin-responsibilities',{cookie:aCookie});good(overrideReport,200,'Monthly report reflects authoritative override');assert.equal(overrideReport.data.members.find(x=>x.id===member.data.member.id).expected,12500);
 good(await request('admin-responsibility-set',{method:'POST',cookie:aCookie,body:{memberId:member.data.member.id,month:officeMonth,amount:null,reason:'Restore original rank amount'}}),200,'Admin restores automatic monthly responsibility');
-const reportAfterPayment=await request('admin-responsibilities',{cookie:aCookie});good(reportAfterPayment,200,'Admin responsibility overview includes recorded payments');const memberSummary=reportAfterPayment.data.members.find(x=>x.id===member.data.member.id);assert.equal(memberSummary.paid,3000);assert.equal(memberSummary.outstanding,7000);assert.equal(memberSummary.status,'partially_paid');
+const reportAfterPayment=await request('admin-responsibilities',{cookie:aCookie});good(reportAfterPayment,200,'Admin responsibility overview includes recorded payments');const memberSummary=reportAfterPayment.data.members.find(x=>x.id===member.data.member.id);assert.equal(memberSummary.paid,4250);assert.equal(memberSummary.outstanding,5750);assert.equal(memberSummary.status,'partially_paid');
 const memberDetails=await fetch(base+'/api/backend?action=admin-member-details&id='+member.data.member.id,{headers:{cookie:aCookie}}).then(r=>r.json());
-assert.equal(memberDetails.member.name,'E2E Managed Member');assert.equal(memberDetails.payments.length,1);
+assert.equal(memberDetails.member.name,'E2E Managed Member');assert.equal(memberDetails.payments.length,2);
 good(await request('admin-payment-correct',{method:'POST',cookie:aCookie,body:{id:memberDetails.payments[0].id,amount:3000,paidOn:date,forMonth:month,notes:'Verified corrected memo',reason:'Correct receipt description'}}),200,'Admin audits payment correction');
 good(await request('admin-payment-correct',{method:'POST',cookie:mCookie,body:{id:memberDetails.payments[0].id,amount:5000,paidOn:date,forMonth:month,notes:'Tampering',reason:'Attempted alteration'}}),403,'Non-admin payment edit denied');
 
 const memberInfo=await request('me',{cookie:mCookie});good(memberInfo,200,'Member dashboard loads shared records');
-assert.equal(memberInfo.data.member.rank,'Manager');assert.equal(memberInfo.data.teamName,team.data.team.name);assert.equal(memberInfo.data.sponsorName,'E2E Administrator Updated');assert.equal(memberInfo.data.expected,10000);assert.equal(memberInfo.data.responsibility.required,true);assert.equal(memberInfo.data.responsibility.status,'partially_paid');assert.equal(memberInfo.data.received,3000);assert.equal(memberInfo.data.outstanding,7000);assert.equal(memberInfo.data.accounts.length,0);assert.equal(memberInfo.data.payments.length,1);
+assert.equal(memberInfo.data.member.rank,'Manager');assert.equal(memberInfo.data.teamName,team.data.team.name);assert.equal(memberInfo.data.sponsorName,'E2E Administrator Updated');assert.equal(memberInfo.data.expected,10000);assert.equal(memberInfo.data.responsibility.required,true);assert.equal(memberInfo.data.responsibility.status,'partially_paid');assert.equal(memberInfo.data.received,4250);assert.equal(memberInfo.data.outstanding,5750);assert.equal(memberInfo.data.accounts.length,0);assert.equal(memberInfo.data.payments.length,1);
 
 const dailyBefore=await request('attendance-daily',{cookie:mCookie});good(dailyBefore,200,'Member daily attendance initial state');assert.equal(dailyBefore.data.status,'not_checked_in');
 good(await request('attendance-admin-daily',{cookie:mCookie}),403,'Non-admin daily office roster blocked');
