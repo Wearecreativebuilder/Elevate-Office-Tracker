@@ -91,10 +91,10 @@ export default async function handler(req,res){
   if(m.approval_status!=='approved')return fail(res,403,'Your account is not approved. Contact an office administrator.');
 
   if(action.startsWith('attendance-')){
-   const settingsResult=await db.query('select id,office_lat,office_lng,radius_m,schedule_enforced,test_mode,live_since from attendance_settings where id=1');
+   const settingsResult=await db.query('select id,office_lat,office_lng,radius_m,schedule_enforced,test_mode,live_since,office_address from attendance_settings where id=1');
    if(!settingsResult.rowCount)return fail(res,503,'Attendance configuration has not been initialized.');
    const settings=settingsResult.rows[0],clock=attendanceClock();
-   const config={officeConfigured:settings.office_lat!==null&&settings.office_lng!==null,radiusMeters:settings.radius_m,scheduleEnforced:settings.schedule_enforced,testMode:settings.test_mode,officeLatitude:settings.office_lat,officeLongitude:settings.office_lng,officeTimeZone:'Africa/Lagos',liveSince:settings.live_since};
+   const config={officeConfigured:settings.office_lat!==null&&settings.office_lng!==null,radiusMeters:settings.radius_m,scheduleEnforced:settings.schedule_enforced,testMode:settings.test_mode,officeLatitude:settings.office_lat,officeLongitude:settings.office_lng,officeTimeZone:'Africa/Lagos',liveSince:settings.live_since,officeAddress:settings.office_address,liveReady:!settings.test_mode&&settings.schedule_enforced&&settings.office_lat!==null&&settings.office_lng!==null};
    if(action==='attendance-calendar-members'&&req.method==='GET'){
     if(!m.is_admin)return fail(res,403,'Administrator access required.');
     const r=await db.query("select id,name from members where approval_status='approved' order by name limit 1000");
@@ -179,7 +179,7 @@ export default async function handler(req,res){
     if(!Number.isInteger(radius)||radius<20||radius>2000||typeof body.scheduleEnforced!=='boolean'||typeof body.testMode!=='boolean')return fail(res,400,'Set a radius of 20–2000 metres and valid attendance mode switches.');
     if(!body.testMode&&!coords)return fail(res,400,'Set the office GPS coordinates before enabling live attendance.');
     if(!body.testMode&&!body.scheduleEnforced)return fail(res,400,'Enable office hours when switching to live attendance.');
-    const updated=await db.query('update attendance_settings set office_lat=$1,office_lng=$2,radius_m=$3,schedule_enforced=$4,test_mode=$5,live_since=case when $5=false and live_since is null then (now() at time zone 'Africa/Lagos')::date else live_since end,updated_at=now(),updated_by=$6 where id=1 returning id',[coords?.lat??null,coords?.lng??null,radius,body.scheduleEnforced,body.testMode,uid]);
+    const updated=await db.query('update attendance_settings set office_lat=$1,office_lng=$2,radius_m=$3,schedule_enforced=$4,test_mode=$5,live_since=case when $5=false and $1 is not null and $2 is not null and live_since is null then (now() at time zone 'Africa/Lagos')::date else live_since end,updated_at=now(),updated_by=$6 where id=1 returning id',[coords?.lat??null,coords?.lng??null,radius,body.scheduleEnforced,body.testMode,uid]);
     if(!updated.rowCount)return fail(res,503,'Attendance settings unavailable.');
     return res.json({ok:true});
    }
