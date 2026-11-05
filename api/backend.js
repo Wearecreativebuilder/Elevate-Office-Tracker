@@ -270,7 +270,7 @@ export default async function handler(req,res){
    if(decision==='approved'&&!statuses.includes(rank))return fail(res,400,'Choose a valid office status before approving.');
    if(!/^[0-9a-f-]{36}$/i.test(id)||!['approved','rejected'].includes(decision))return fail(res,400,'Invalid approval decision.');
    if(id===uid)return fail(res,400,'You cannot review your own administrator account.');
-   const result=await db.query("update members set approval_status=$2,rank=case when $2='approved' then $4 else rank end,reviewed_by=$3,reviewed_at=now() where id=$1 and approval_status='pending' returning id,name,email,rank,approval_status",[id,decision,uid,rank]);
+   const result=await db.query("update members set approval_status=$2,rank=case when $2::varchar='approved' then $4::varchar else rank end,reviewed_by=$3,reviewed_at=now() where id=$1 and approval_status='pending' returning id,name,email,rank,approval_status",[id,decision,uid,rank]);
    if(!result.rowCount)return fail(res,409,'This application has already been reviewed or was not found.');
    return res.json({member:result.rows[0],monthlyResponsibility:decision==='approved'?roleDue(result.rows[0].rank):null});
   }
