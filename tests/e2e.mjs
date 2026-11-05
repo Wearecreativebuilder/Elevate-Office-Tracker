@@ -24,6 +24,7 @@ good(await request('login',{method:'POST',body:{email:'bad@example.invalid',pass
 const admin=await request('register',{method:'POST',body:{name:'E2E Test Admin',email:email1,password,adminSetupKey:adminKey}});
 good(admin,201,'Admin account registration');assert.equal(admin.data.member.isAdmin,true);
 const aCookie=admin.cookie;assert.ok(aCookie.includes('elevate_session='));
+good(await request('admin-directory'),401,'Anonymous office directory blocked');
 good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{officeLatitude:null,officeLongitude:null,radiusMeters:150,testMode:true,scheduleEnforced:false}}),200,'Admin enables isolated GPS testing for E2E only');
 
 const self=await request('me',{cookie:aCookie});good(self,200,'Admin session');assert.equal(self.data.member.rank,'Member');
@@ -35,9 +36,12 @@ const queue=await request('admin-pending',{cookie:aCookie});good(queue,200,'Admi
 good(await request('admin-review',{method:'POST',body:{id:member.data.member.id,decision:'approved',rank:'Distributor'}}),401,'Anonymous approval blocked');
 good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved',rank:'Distributor'}}),200,'Admin approves new applicant');
 good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved'}}),409,'Duplicate approval blocked');
+const officialDirectory=await request('admin-directory',{cookie:aCookie});good(officialDirectory,200,'Admin sees unified Neon directory');assert.ok(officialDirectory.data.members.some(x=>x.id===member.data.member.id&&x.rank==='Distributor'));assert.ok(officialDirectory.data.teams.some(x=>x.id===team.data.team.id));
 const dueAfterApproval=await request('admin-responsibilities',{cookie:aCookie});good(dueAfterApproval,200,'Admin sees automatic office responsibility after approval');const assigned=dueAfterApproval.data.members.find(x=>x.id===member.data.member.id);assert.equal(assigned.rank,'Distributor');assert.equal(assigned.expected,10000);assert.equal(assigned.required,true);assert.equal(assigned.status,'due');assert.equal(dueAfterApproval.data.members.find(x=>x.id===admin.data.member.id).status,'exempt');
 const memberSession=await request('login',{method:'POST',body:{email:email2,password}});good(memberSession,200,'Approved member can login');
 const mCookie=memberSession.cookie;
+good(await request('admin-directory',{cookie:mCookie}),403,'Non-admin directory access blocked');
+good(await request('admin-responsibility-set',{method:'POST',cookie:mCookie,body:{memberId:member.data.member.id,month:'2026-11',amount:0,reason:'Unauthorized override'}}),403,'Non-admin override blocked');
 good(await request('admin-responsibilities',{cookie:mCookie}),403,'Non-admin cannot inspect payment obligations of all members');
 good(await request('admin-rank',{method:'POST',cookie:mCookie,body:{id:member.data.member.id,rank:'Director',teamId:team.data.team.id}}),403,'Member cannot self-promote');
 const memberProfile=await request('profile',{method:'POST',cookie:mCookie,body:{name:'E2E Test Member Updated',phone:'+2348000000000'}});good(memberProfile,200,'Member edits personal profile');
@@ -52,6 +56,10 @@ const ownAdminUpdate=await request('admin-member-update',{method:'POST',cookie:a
 const nowParts=new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Africa/Lagos'}).formatToParts(new Date()),pick=n=>nowParts.find(x=>x.type===n).value,month=pick('year')+'-'+pick('month'),date=month+'-'+pick('day');
 good(await request('admin-payment',{method:'POST',cookie:aCookie,body:{memberId:member.data.member.id,amount:3000,paidOn:date,forMonth:month,notes:'E2E TEST ONLY'}}),201,'Admin records verified payment');
 
+const reportBeforeOverride=await request('admin-responsibilities',{cookie:aCookie});const officeMonth=reportBeforeOverride.data.month;
+good(await request('admin-responsibility-set',{method:'POST',cookie:aCookie,body:{memberId:member.data.member.id,month:officeMonth,amount:12500,reason:'Approved temporary adjustment'}}),200,'Admin sets auditable month-specific responsibility');
+const overrideReport=await request('admin-responsibilities',{cookie:aCookie});good(overrideReport,200,'Monthly report reflects authoritative override');assert.equal(overrideReport.data.members.find(x=>x.id===member.data.member.id).expected,12500);
+good(await request('admin-responsibility-set',{method:'POST',cookie:aCookie,body:{memberId:member.data.member.id,month:officeMonth,amount:null,reason:'Restore original rank amount'}}),200,'Admin restores automatic monthly responsibility');
 const reportAfterPayment=await request('admin-responsibilities',{cookie:aCookie});good(reportAfterPayment,200,'Admin responsibility overview includes recorded payments');const memberSummary=reportAfterPayment.data.members.find(x=>x.id===member.data.member.id);assert.equal(memberSummary.paid,3000);assert.equal(memberSummary.outstanding,7000);assert.equal(memberSummary.status,'partially_paid');
 const memberDetails=await fetch(base+'/api/backend?action=admin-member-details&id='+member.data.member.id,{headers:{cookie:aCookie}}).then(r=>r.json());
 assert.equal(memberDetails.member.name,'E2E Managed Member');assert.equal(memberDetails.payments.length,1);
