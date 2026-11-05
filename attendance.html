@@ -231,7 +231,7 @@ async function loadCalendar(){try{const params={month:currentMonth};if(calendarM
 function drawCalendar(d){
  const [y,m]=d.month.split('-').map(Number),days=new Date(Date.UTC(y,m,0)).getUTCDate(),offset=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;
  const records=new Map((d.records||[]).map(x=>[String(x.office_date).slice(0,10),x]));
- const start=[d.approvedDate,d.liveSince].filter(Boolean).map(x=>String(x).slice(0,10)).sort().at(-1)||null,weekdays=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+ const start=d.liveSince?[d.approvedDate,d.liveSince].filter(Boolean).map(x=>String(x).slice(0,10)).sort().at(-1):null,weekdays=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
  const parts=weekdays.map(x=>'<div class="calendar-weekday" role="columnheader">'+x+'</div>');let present=0,absent=0,testRecords=0;
  for(let i=0;i<offset;i++)parts.push('<div class="calendar-cell empty" aria-hidden="true"></div>');
  for(let day=1;day<=days;day++){
