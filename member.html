@@ -221,13 +221,12 @@ img,svg,video,canvas{max-width:100%;height:auto}
 <label>Contribution month<input id="myDueMonth" type="month" required></label>
 <label>Amount paid (₦)<input id="myDueAmount" type="number" min="0.01" max="100000000" step="0.01" required></label>
 <label>Date you paid<input id="myDueDate" type="date" required></label>
-<label>Payment / transfer reference<input id="myDueReference" maxlength="120" minlength="4" required placeholder="Transaction reference or receipt ID"></label>
 <label>Payment note (optional)<input id="myDueNote" maxlength="300" placeholder="Transfer or payment details"></label>
 <div><button class="primary" type="submit">Submit for admin confirmation</button></div>
 </form>
 <div id="myDuesMessage" role="status" aria-live="polite"></div>
 <h2 style="margin-top:22px">My payment submissions</h2>
-<div class="tablewrap"><table><thead><tr><th>Month</th><th>Amount</th><th>Reference</th><th>Status</th><th>Admin message</th></tr></thead><tbody id="myDuesRows"><tr><td colspan="5">No submissions yet</td></tr></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Month</th><th>Amount</th><th>Status</th><th>Admin message</th></tr></thead><tbody id="myDuesRows"><tr><td colspan="4">No submissions yet</td></tr></tbody></table></div>
 </section></div>
 <section class="card" id="officeFinancialOverview"><h2>Office financial overview</h2><p class="muted">Verified contributions recorded by the office. This is not a full cash or bank balance because expenses may not be included.</p><div class="grid"><div class="stat"><label>Total verified office contributions</label><strong id="officeVerifiedTotal">—</strong></div><div class="stat"><label>My monthly balance</label><strong id="officeMyBalance">—</strong></div></div></section>
 <section class="card" id="dailyAttendanceCard"><div class="row"><div><h2>Today's attendance <span class="pill" id="memberAttendanceDate">WAT</span></h2><p class="muted">Your daily office sign-in records</p></div><button id="reloadMemberAttendance" type="button">Refresh</button></div>
@@ -239,7 +238,7 @@ img,svg,video,canvas{max-width:100%;height:auto}
 <div id="admin" class="card hidden"><h2>Administrator control center</h2><section class="card" id="adminDueReview">
 <div class="row"><div><h2>Pending monthly dues <span class="pill" id="adminDuePendingCount">0</span></h2><p class="muted">Check the actual bank transfer or receipt before approving any submission.</p></div><button type="button" id="refreshDueReviews">Refresh submissions</button></div>
 <div id="adminDueReviewMessage" role="status"></div>
-<div class="tablewrap"><table><thead><tr><th>Member</th><th>Month</th><th>Amount</th><th>Reference</th><th>Status</th><th>Review</th></tr></thead><tbody id="adminDueRows"><tr><td colspan="6">No submissions yet</td></tr></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Member</th><th>Month</th><th>Amount</th><th>Payment details</th><th>Status</th><th>Review</th></tr></thead><tbody id="adminDueRows"><tr><td colspan="6">No submissions yet</td></tr></tbody></table></div>
 </section><p>Administrator access · Member records, teams, payments and attendance management</p><section class="card" style="border-color:#b5ddd6"><div class="row"><div><h2>Daily office attendance</h2><p class="muted">Approved-member roster · Lagos / Nigeria time · test entries shown separately</p></div><button id="reloadOfficeAttendance" type="button">Refresh register</button></div>
 <label style="max-width:270px">Choose office date<input id="adminAttendanceDate" type="date"></label>
 <div class="grid"><div class="stat"><label>Approved members</label><strong id="officeMemberTotal">—</strong></div><div class="stat"><label>Signed in</label><strong id="officeCheckedIn">—</strong></div><div class="stat"><label>Signed out</label><strong id="officeCheckedOut">—</strong></div><div class="stat"><label>No sign-in recorded</label><strong id="officeNotCheckedIn">—</strong></div></div>
@@ -358,7 +357,7 @@ $('reloadResponsibilities').onclick=loadResponsibilityReport;$('responsibilityRe
 async function loadMyDues(){
  try{
   const d=await api('my-due-submissions'),status={pending:'Pending review',approved:'Approved',rejected:'Rejected'};
-  $('myDuesRows').innerHTML=d.submissions.map(x=>'<tr><td>'+esc(String(x.for_month).slice(0,7))+'</td><td>'+fmt(x.amount)+'</td><td>'+esc(x.payment_reference)+'</td><td><span class="pill">'+esc(status[x.status]||x.status)+'</span></td><td>'+esc(x.review_note)+'</td></tr>').join('')||'<tr><td colspan="5">No submissions yet</td></tr>';
+  $('myDuesRows').innerHTML=d.submissions.map(x=>'<tr><td>'+esc(String(x.for_month).slice(0,7))+'</td><td>'+fmt(x.amount)+'</td><td><span class="pill">'+esc(status[x.status]||x.status)+'</span></td><td>'+esc(x.review_note)+'</td></tr>').join('')||'<tr><td colspan="4">No submissions yet</td></tr>';
   if(!$('myDueMonth').value)$('myDueMonth').value=last.month;
   if(!$('myDueDate').value)$('myDueDate').value=new Date().toLocaleDateString('en-CA',{timeZone:'Africa/Lagos'});
  }catch(e){msg('myDuesMessage',e.message,true)}
@@ -368,13 +367,13 @@ async function loadOfficeFinance(){
  catch(e){$('officeVerifiedTotal').textContent='Unavailable';$('officeMyBalance').textContent='Unavailable'}
 }
 $('memberDuesForm').onsubmit=async e=>{e.preventDefault();const btn=e.submitter||$('memberDuesForm').querySelector('button');btn.disabled=true;
- try{const r=await api('due-submit',{month:$('myDueMonth').value,amount:$('myDueAmount').value,paidOn:$('myDueDate').value,reference:$('myDueReference').value,note:$('myDueNote').value});msg('myDuesMessage',r.message);$('myDueAmount').value='';$('myDueReference').value='';$('myDueNote').value='';await loadMyDues()}
+ try{const r=await api('due-submit',{month:$('myDueMonth').value,amount:$('myDueAmount').value,paidOn:$('myDueDate').value,note:$('myDueNote').value});msg('myDuesMessage',r.message);$('myDueAmount').value='';$('myDueNote').value='';await loadMyDues()}
  catch(err){msg('myDuesMessage',err.message,true)}finally{btn.disabled=false}};
 async function loadDueReviews(){
  try{
   const data=await api('admin-due-submissions');
   $('adminDuePendingCount').textContent=data.pending;
-  $('adminDueRows').innerHTML=data.submissions.map(x=>'<tr><td>'+esc(x.name)+'<br><small>'+esc(x.rank)+'</small></td><td>'+esc(String(x.for_month).slice(0,7))+'</td><td>'+fmt(x.amount)+'</td><td>'+esc(x.payment_reference)+'<br><small>'+esc(x.note)+'</small></td><td>'+esc(x.status)+'</td><td>'+(x.status==='pending'?'<button class="primary" type="button" data-confirm-due="'+esc(x.id)+'">Approve</button> <button type="button" data-reject-due="'+esc(x.id)+'">Reject</button>':'Reviewed')+'</td></tr>').join('')||'<tr><td colspan="6">No payment submissions</td></tr>';
+  $('adminDueRows').innerHTML=data.submissions.map(x=>'<tr><td>'+esc(x.name)+'<br><small>'+esc(x.rank)+'</small></td><td>'+esc(String(x.for_month).slice(0,7))+'</td><td>'+fmt(x.amount)+'</td><td>'+esc(String(x.paid_on).slice(0,10))+'<br><small>'+esc(x.note)+'</small></td><td>'+esc(x.status)+'</td><td>'+(x.status==='pending'?'<button class="primary" type="button" data-confirm-due="'+esc(x.id)+'">Approve</button> <button type="button" data-reject-due="'+esc(x.id)+'">Reject</button>':'Reviewed')+'</td></tr>').join('')||'<tr><td colspan="6">No payment submissions</td></tr>';
  }catch(e){msg('adminDueReviewMessage',e.message,true)}
 }
 $('refreshDueReviews').onclick=loadDueReviews;
