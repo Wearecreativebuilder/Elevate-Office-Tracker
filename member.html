@@ -249,7 +249,15 @@ img,svg,video,canvas{max-width:100%;height:auto}
 <label style="max-width:260px">Responsibility month<input id="responsibilityReportMonth" type="month"></label>
 <div class="grid"><div class="stat"><label>Required to pay</label><strong id="respRequired">—</strong></div><div class="stat"><label>Exempt</label><strong id="respExempt">—</strong></div><div class="stat"><label>Fully paid</label><strong id="respPaid">—</strong></div><div class="stat"><label>Unpaid / Partially paid</label><strong id="respDue">—</strong></div></div>
 <div class="grid"><div class="stat"><label>Amount expected</label><strong id="respExpected">—</strong></div><div class="stat"><label>Amount received</label><strong id="respReceived">—</strong></div><div class="stat"><label>Outstanding</label><strong id="respOutstanding">—</strong></div></div>
-<div class="tablewrap"><table><thead><tr><th>Member</th><th>Office rank</th><th>Responsibility</th><th>Monthly amount</th><th>Paid</th><th>Outstanding</th></tr></thead><tbody id="responsibilityReportRows"><tr><td colspan="6">Loading…</td></tr></tbody></table></div><p id="responsibilityReportMessage" class="muted">Default responsibility follows office rank. Existing monthly overrides still take priority.</p></section>
+<div class="tablewrap"><table><thead><tr><th>Member</th><th>Office rank</th><th>Responsibility</th><th>Monthly amount</th><th>Paid</th><th>Outstanding</th><th>Admin edit</th></tr></thead><tbody id="responsibilityReportRows"><tr><td colspan="7">Loading…</td></tr></tbody></table></div>
+<form id="responsibilityEditForm" class="hidden" style="margin:18px 0;border-top:1px solid var(--e-border);padding-top:17px">
+<h3>Edit monthly office responsibility</h3>
+<p class="muted" id="responsibilityEditName"></p>
+<div class="grid2"><label>Month<input id="editDueMonth" type="month" required></label><label>Office responsibility amount (₦)<input id="editDueAmount" type="number" min="0" max="100000000" step="0.01" required></label></div>
+<label>Reason for update<input id="editDueReason" minlength="8" maxlength="300" required placeholder="Reason for adjusting this member's dues"></label>
+<div class="actions"><button class="primary" type="submit" id="saveResponsibilityEdit">Save monthly amount</button><button type="button" id="restoreResponsibilityDefault">Restore rank-based amount</button><button type="button" id="cancelResponsibilityEdit">Cancel</button></div>
+<p class="muted">Changes apply to the selected member and month. They are recorded in the administrative audit history and do not alter verified payments.</p>
+</form><p id="responsibilityReportMessage" class="muted">Default responsibility follows office rank. Existing monthly overrides still take priority.</p></section>
 <section class="card" style="border-color:#b5ddd6"><h2>Manage all member records</h2><p>Open any approved account, including your own administrator account. Update details, review payments, attendance and public Fiverr profiles. Financial corrections are audited.</p>
 <label>Choose office member<select id="manageMemberSelect"><option value="">Select a member</option></select></label><button type="button" id="loadMemberRecord">Open member record</button><div id="memberEditMessage"></div><div id="memberEditor" class="hidden">
 <h2 style="margin-top:20px">Member details <span class="pill" id="selectedRole"></span></h2>
@@ -351,7 +359,34 @@ $('editAttendanceRows').onclick=e=>{const b=e.target.closest('[data-editatt]');i
 $('cancelAttendanceNote').onclick=()=>show('attendanceNoteForm',false);
 $('attendanceNoteForm').onsubmit=async e=>{e.preventDefault();if(!selectedAttendance)return;try{await api('admin-attendance-note',{id:selectedAttendance,note:$('attendanceNoteText').value});await editMember();msg('memberEditMessage','Attendance note saved and audited.')}catch(err){msg('memberEditMessage',err.message,true)}};
 
-async function loadResponsibilityReport(){try{const selected=$('responsibilityReportMonth').value;const data=await api('admin-responsibilities',undefined,selected?{month:selected}:{});if(!selected)$('responsibilityReportMonth').value=data.month;const t=data.totals;$('respRequired').textContent=t.required;$('respExempt').textContent=t.exempt;$('respPaid').textContent=t.paid;$('respDue').textContent=t.due;$('respExpected').textContent=fmt(t.expected);$('respReceived').textContent=fmt(t.received);$('respOutstanding').textContent=fmt(t.outstanding);const labels={exempt:'Exempt',due:'Payment due',partially_paid:'Partially paid',paid:'Fully paid',not_configured:'Not configured'};$('responsibilityReportRows').innerHTML=data.members.map(m=>'<tr><td>'+esc(m.name)+'<br><small>'+esc(m.email)+'</small></td><td>'+esc(m.rank)+'</td><td><span class="pill">'+esc(labels[m.status]||m.status)+'</span></td><td>'+esc(m.expected==null?'Not set':fmt(m.expected))+'</td><td>'+esc(fmt(m.paid))+'</td><td>'+esc(m.outstanding==null?'—':fmt(m.outstanding))+'</td></tr>').join('')||'<tr><td colspan="6">No approved members</td></tr>';$('responsibilityReportMessage').textContent='Updated for '+data.month+' · '+t.members+' approved members. Amounts are calculated from office rank unless an administrator set a month-specific override.';}catch(e){$('responsibilityReportMessage').textContent=e.message;}}
+
+let responsibilityMemberId=null,responsibilityMemberName='',responsibilityRows=[];
+function openResponsibilityEditor(memberId){
+ const m=responsibilityRows.find(row=>row.id===memberId);if(!m)return;
+ responsibilityMemberId=m.id;responsibilityMemberName=m.name;
+ $('responsibilityEditName').textContent=m.name+' · '+m.rank+' · Current responsibility: '+(m.expected===null?'Not set':fmt(m.expected));
+ $('editDueMonth').value=$('responsibilityReportMonth').value;
+ $('editDueAmount').value=m.expected??0;
+ $('editDueReason').value='';
+ show('responsibilityEditForm',true);
+ $('responsibilityEditForm').scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+$('responsibilityReportRows').onclick=e=>{const btn=e.target.closest('[data-edit-office-due]');if(btn)openResponsibilityEditor(btn.dataset.editOfficeDue)};
+$('cancelResponsibilityEdit').onclick=()=>{show('responsibilityEditForm',false);responsibilityMemberId=null};
+async function saveOfficeDue(amount,reason){
+ if(!responsibilityMemberId)return;
+ const month=$('editDueMonth').value,button=$('saveResponsibilityEdit');button.disabled=true;
+ try{
+  await api('admin-responsibility-set',{memberId:responsibilityMemberId,month,amount,reason});
+  $('responsibilityReportMonth').value=month;show('responsibilityEditForm',false);
+  responsibilityMemberId=null;
+  await loadResponsibilityReport();msg('responsibilityReportMessage',amount===null?'Restored the rank-based responsibility.':'Monthly responsibility updated and audited.');
+ }catch(err){msg('responsibilityReportMessage',err.message,true)}finally{button.disabled=false}
+}
+$('responsibilityEditForm').onsubmit=async e=>{e.preventDefault();const amount=Number($('editDueAmount').value);if(!Number.isFinite(amount)||amount<0)return msg('responsibilityReportMessage','Enter a valid amount.',true);await saveOfficeDue(amount,$('editDueReason').value.trim())};
+$('restoreResponsibilityDefault').onclick=async()=>{const reason=$('editDueReason').value.trim();if(reason.length<8)return msg('responsibilityReportMessage','Enter a reason of at least eight characters first.',true);if(!confirm('Restore '+responsibilityMemberName+' to the rank-based amount for this month?'))return;await saveOfficeDue(null,reason)};
+
+async function loadResponsibilityReport(){try{const selected=$('responsibilityReportMonth').value;const data=await api('admin-responsibilities',undefined,selected?{month:selected}:{});if(!selected)$('responsibilityReportMonth').value=data.month;responsibilityRows=data.members;const t=data.totals;$('respRequired').textContent=t.required;$('respExempt').textContent=t.exempt;$('respPaid').textContent=t.paid;$('respDue').textContent=t.due;$('respExpected').textContent=fmt(t.expected);$('respReceived').textContent=fmt(t.received);$('respOutstanding').textContent=fmt(t.outstanding);const labels={exempt:'Exempt',due:'Payment due',partially_paid:'Partially paid',paid:'Fully paid',not_configured:'Not configured'};$('responsibilityReportRows').innerHTML=data.members.map(m=>'<tr><td>'+esc(m.name)+'<br><small>'+esc(m.email)+'</small></td><td>'+esc(m.rank)+'</td><td><span class="pill">'+esc(labels[m.status]||m.status)+'</span></td><td>'+esc(m.expected==null?'Not set':fmt(m.expected))+'</td><td>'+esc(fmt(m.paid))+'</td><td>'+esc(m.outstanding==null?'—':fmt(m.outstanding))+'</td><td><button type="button" data-edit-office-due="'+esc(m.id)+'">Edit amount</button></td></tr>').join('')||'<tr><td colspan="7">No approved members</td></tr>';$('responsibilityReportMessage').textContent='Updated for '+data.month+' · '+t.members+' approved members. Amounts are calculated from office rank unless an administrator set a month-specific override.';}catch(e){$('responsibilityReportMessage').textContent=e.message;}}
 $('reloadResponsibilities').onclick=loadResponsibilityReport;$('responsibilityReportMonth').onchange=loadResponsibilityReport;
 
 async function loadMyDues(){
