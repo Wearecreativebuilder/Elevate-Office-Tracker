@@ -108,6 +108,60 @@ body[data-finance-access="distributor"] #verifiedOfficeSnapshot .toolbar a{displ
 body[data-finance-access="distributor"] #verifiedOfficeSnapshot{display:block!important}
 #financeAccessMessage{margin:7vh auto 20px;max-width:570px;padding:28px;background:var(--e-panel);color:var(--e-ink);border:1px solid var(--e-border);border-radius:18px}
 body:not([data-finance-access="denied"]) #financeAccessMessage{display:none}
+
+/* Mobile viewport containment — avoid side gaps caused by min-content grids and long values */
+html{width:100%;max-width:100%;overflow-x:clip}
+body{width:100%;max-width:100%;min-width:0!important;overflow-x:clip;margin:0}
+main,.main,.shell,#dashboard,#admin,#content,#memberFinance,.section,.layout,.twocol,.grid,.grid2,.cards,.stats,.panel,.card,.row,.tablewrap{min-width:0;max-width:100%;box-sizing:border-box}
+.shell{width:100%;grid-template-columns:minmax(0,235px) minmax(0,1fr)}
+.main,main{width:100%;min-width:0;box-sizing:border-box}
+.grid>*,.grid2>*,.cards>*,.stats>*,.twocol>*,.layout>*,.row>*,.flex>*,.top>*,.toolbar>*,.form>*,.fields>*,.panel>*,.card>*{min-width:0}
+.tablewrap{width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+table{max-width:none}
+p,h1,h2,h3,label,.brand,.notice,.pill,.muted,.stat strong,.metric strong,.account,.calendar-summary{overflow-wrap:anywhere;word-break:normal}
+input,select,textarea{max-width:100%;min-width:0}
+img,svg,video,canvas{max-width:100%;height:auto}
+@media(max-width:900px){
+ .shell{display:block!important;width:100%;min-width:0}
+ .side{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden}
+ .side nav{min-width:0}
+ .main,main{width:100%;max-width:100%;margin-inline:auto}
+}
+@media(max-width:600px){
+ html,body{width:100%;max-width:100%;overflow-x:clip}
+ .main,main{padding-inline:12px!important}
+ .panel,.card,.metric,.stat{max-width:100%}
+ .grid,.grid2,.cards,.stats,.twocol,.layout,.form,.fields{width:100%;min-width:0}
+ .row,.top,.toolbar,.actions{max-width:100%;min-width:0}
+ .row>*,.top>*,.toolbar>*,.actions>*{max-width:100%;min-width:0}
+ .tablewrap{margin-inline:0!important}
+ #financeAccessMessage,#teamsAccessMessage{max-width:calc(100% - 24px);margin-inline:12px}
+ input,select,textarea{font-size:16px!important}
+}
+@media(max-width:360px){
+ .main,main{padding-inline:10px!important}
+ .panel,.card{padding:13px!important}
+ .grid,.cards,.stats{grid-template-columns:minmax(0,1fr)!important}
+ .top .actions{width:100%}
+}
+
+/* Finance keeps its wide ledger in a scrollable table, not a wider page */
+@media(max-width:900px){
+ .side{flex-wrap:nowrap}
+ .side .brand{flex:0 0 auto}
+ .side .nav{min-width:max-content}
+}
+@media(max-width:600px){
+ .top{align-items:stretch}
+ .top>div{max-width:100%}
+ .top .actions{display:flex;flex-wrap:wrap}
+ .top .actions>*{flex:1 1 140px}
+ .cards{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .metric strong{font-size:clamp(17px,5vw,25px)!important}
+ .toolbar{flex-wrap:wrap;gap:8px}
+}
+@media(max-width:390px){.cards{grid-template-columns:minmax(0,1fr)!important}}
+
 </style></head><body><div id="financeAccessMessage"><h1>Finance access restricted</h1><p>Office finance information is available to approved Distributors and higher ranks. Please sign in with an eligible office account.</p><p><a href="./member.html">Return to your office dashboard</a></p></div><div class="shell"><aside class="side"><div class="brand">◈ ELEVATE<small>OFFICE TRACKING SYSTEM</small></div><button class="nav active" data-page="dashboard">◫ &nbsp; Dashboard</button><button class="nav" data-page="transactions">⇄ &nbsp; Transactions</button><button class="nav" data-page="members">♙ &nbsp; Office Members</button><button class="nav" data-page="monthly">◷ &nbsp; Monthly Dues</button><a class="nav" href="./attendance.html" style="text-decoration:none">◷ &nbsp; Attendance</a><a class="nav" href="./teams.html" style="text-decoration:none">♧ &nbsp; Teams &amp; Downlines</a><a class="nav" href="./member.html" style="text-decoration:none">▣ &nbsp; Member portal</a><button class="nav" data-page="reports">▤ &nbsp; Reports</button><button class="nav" data-page="settings">⚙ &nbsp; Data & Backup</button><div class="sidefoot">Currency: Nigerian Naira (₦)<br/>Tracking since 2 Nov 2026</div></aside><main class="main"><div class="top"><div><h1 id="pageTitle">Finance overview</h1><p class="muted" id="subtitle">Track office income, monthly responsibilities, and expenses.</p></div><div class="actions"><button class="btn" id="exportTop">↓ Export CSV</button><button class="btn dark" id="addTop">+ Add transaction</button></div></div>
 <section id="dashboard" class="section active"><div class="panel" id="verifiedOfficeSnapshot"><div class="toolbar"><h2>Verified office contributions — this month</h2><a class="btn" href="./member.html">Manage members &amp; payments</a></div><p class="hint" id="snapshotStatus">Loading synchronized member contributions…</p><div class="cards"><div class="metric"><span class="muted">Official expected</span><strong id="snapshotExpected">—</strong></div><div class="metric"><span class="muted">Verified received</span><strong id="snapshotReceived">—</strong></div><div class="metric"><span class="muted">Outstanding</span><strong id="snapshotOutstanding">—</strong></div></div><p class="hint">The historical expense and transaction ledger below is stored separately in this browser and is not added to the verified monthly totals.</p></div><div class="notice">Historical browser-only finance ledger below. For official member payments and responsibilities, use the synchronized Monthly Dues section.</div><div class="cards"><div class="metric"><div class="symbol">↙</div><div><span class="muted">Total contributions</span><strong id="totalIncome">₦0</strong><p>Legacy browser ledger; official monthly dues appear separately</p></div></div><div class="metric exp"><div class="symbol">↗</div><div><span class="muted">Office expenses</span><strong id="totalExpense">₦0</strong><p>All recorded office spending</p></div></div><div class="metric bal"><div class="symbol">▣</div><div><span class="muted">Available balance</span><strong id="totalBalance">₦0</strong><p>Contributions minus expenses</p></div></div></div><div class="twocol"><div class="panel"><div class="toolbar"><h2>Recent activity</h2><button class="linkbtn" data-go="transactions">View all →</button></div><div class="tablewrap"><table><thead><tr><th>Date</th><th>Details</th><th>Amount</th></tr></thead><tbody id="recentRows"></tbody></table></div></div><div class="panel"><h2>Funds at a glance</h2><div id="overviewBar" style="display:flex;height:17px;border-radius:12px;background:#e6edf0;overflow:hidden;margin:26px 0 14px"></div><div class="summaryrow"><div><span class="muted">Contributors</span><strong id="contributorCount"></strong></div><div><span class="muted">Expense entries</span><strong id="expenseCount"></strong></div></div><p class="hint">This balance represents recorded money only, not a verified bank account balance.</p><div class="note">Legacy Mr Uche and Mr Gabriel contributions have been removed. Only verified payments from registered members appear in official Monthly Dues.</div></div></div></section>
 <section id="transactions" class="section"><div class="panel"><div class="toolbar"><h2>All transactions</h2><button class="btn dark" id="addTransaction">+ Record a transaction</button></div><div class="filters"><div class="field"><label>Type</label><select id="txTypeFilter"><option value="all">All transactions</option><option value="income">Contributions</option><option value="expense">Office expenses</option></select></div><div class="field"><label>From</label><input type="date" id="txFrom"/></div><div class="field"><label>To</label><input type="date" id="txTo"/></div><button class="btn" id="clearTx">Clear filters</button></div><div class="tablewrap"><table><thead><tr><th>Date</th><th>Type</th><th>Member / Description</th><th>Amount</th><th>Notes</th><th></th></tr></thead><tbody id="transactionRows"></tbody></table></div></div></section>
