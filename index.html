@@ -180,7 +180,7 @@ $('duesRows').onclick=async e=>{
 $('exportMonthly').onclick=()=>{if(!currentReport)return alert('Load the official monthly report first.');
 download('elevate-verified-monthly-dues-'+currentReport.month+'.csv',[['Month','Member','Office Rank','Expected NGN','Paid NGN','Outstanding NGN','Status','Calculation'],...currentReport.members.map(m=>[currentReport.month,m.name,m.rank,m.expected,m.paid,m.outstanding,labels[m.status],m.source])])};
 window.addEventListener('focus',()=>{if(!document.hidden)loadOfficial()});
-if(document.body.dataset.financeAccess==='admin')loadOfficial();
+window.addEventListener('finance-access-ready',()=>{if(document.body.dataset.financeAccess==='admin')loadOfficial()});if(document.body.dataset.financeAccess==='admin')loadOfficial();
 })();
 </script><script>
 (()=>{const root=document.documentElement;let theme='light';try{theme=localStorage.getItem('elevate-color-theme')||'light'}catch{}root.dataset.theme=theme==='dark'?'dark':'light';
@@ -197,7 +197,7 @@ update();const mount=document.querySelector('.top .actions')||document.querySele
   if(!r.ok||!d.member)throw Error('Login required');
   const eligible=['Distributor','Manager','Senior Manager','Executive Manager','Director','Emirald Director'];
   const role=d.member.isAdmin?'admin':eligible.includes(d.member.rank)?'distributor':'denied';
-  document.body.dataset.financeAccess=role;
+  document.body.dataset.financeAccess=role;window.dispatchEvent(new Event('finance-access-ready'));
   if(role==='distributor'){
    const info=await fetch('/api/backend?action=office-financial-summary',{credentials:'same-origin',cache:'no-store'});
    if(!info.ok)throw Error('Office summary unavailable');
