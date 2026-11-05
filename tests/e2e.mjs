@@ -24,6 +24,8 @@ good(await request('login',{method:'POST',body:{email:'bad@example.invalid',pass
 const admin=await request('register',{method:'POST',body:{name:'E2E Test Admin',email:email1,password,adminSetupKey:adminKey}});
 good(admin,201,'Admin account registration');assert.equal(admin.data.member.isAdmin,true);
 const aCookie=admin.cookie;assert.ok(aCookie.includes('elevate_session='));
+good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{officeLatitude:null,officeLongitude:null,radiusMeters:150,testMode:true,scheduleEnforced:false}}),200,'Admin enables isolated GPS testing for E2E only');
+
 const self=await request('me',{cookie:aCookie});good(self,200,'Admin session');assert.equal(self.data.member.rank,'Member');
 const team=await request('admin-team',{method:'POST',cookie:aCookie,body:{name:'E2E Test Team '+unique}});good(team,201,'Admin creates team');
 const member=await request('register',{method:'POST',body:{name:'E2E Test Member',email:email2,password,sponsorCode:admin.data.member.sponsorCode}});good(member,201,'Member account registration');
