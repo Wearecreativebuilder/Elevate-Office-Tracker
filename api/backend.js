@@ -278,7 +278,7 @@ export default async function handler(req,res){
    const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit'}).formatToParts(new Date());
    const nowMonth=parts.find(x=>x.type==='year').value+'-'+parts.find(x=>x.type==='month').value;
    const month=String(req.query.month||nowMonth);
-   if(!/^\\d{4}-\\d{2}$/.test(month)||Number(month.slice(5))<1||Number(month.slice(5))>12)return fail(res,400,'Choose a valid YYYY-MM month.');
+   if(!/^\d{4}-\d{2}$/.test(month)||Number(month.slice(5))<1||Number(month.slice(5))>12)return fail(res,400,'Choose a valid YYYY-MM month.');
    const r=await db.query(`select m.id,m.name,m.email,m.rank,m.is_admin,override.amount as custom_amount,coalesce(p.total,0) as paid
      from members m
      left join monthly_responsibilities override on override.member_id=m.id and override.month=$1::date
