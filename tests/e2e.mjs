@@ -63,6 +63,10 @@ const dailyBefore=await request('attendance-daily',{cookie:mCookie});good(dailyB
 good(await request('attendance-admin-daily',{cookie:mCookie}),403,'Non-admin daily office roster blocked');
 const emptyRoster=await request('attendance-admin-daily',{cookie:aCookie});good(emptyRoster,200,'Admin daily roster before check-in');assert.equal(emptyRoster.data.totals.checkedIn,0);assert.equal(emptyRoster.data.totals.approvedMembers,2);
 good(await request('attendance-admin-daily',{cookie:aCookie,origin:'https://other.example'}),200,'Read-only daily roster available to admin');
+const initialCalendar=await request('attendance-calendar',{cookie:mCookie});good(initialCalendar,200,'Member views calendar without premature absences');assert.equal(initialCalendar.data.records.length,0);assert.equal(initialCalendar.data.liveSince,null);
+good(await request('attendance-calendar',{cookie:mCookie,origin:'https://other.example'}),200,'Calendar is read-only');
+good(await request('attendance-calendar-members',{cookie:mCookie}),403,'Member cannot list all attendance calendars');
+const adminCalendarList=await request('attendance-calendar-members',{cookie:aCookie});good(adminCalendarList,200,'Administrator can select attendance calendars');assert.ok(adminCalendarList.data.members.some(x=>x.id===member.data.member.id));
 const attendanceInfo=await request('attendance-info',{cookie:mCookie});good(attendanceInfo,200,'Approved member reads attendance settings');assert.equal(attendanceInfo.data.config.testMode,true);assert.equal(attendanceInfo.data.config.scheduleEnforced,false);
 good(await request('attendance-info'),401,'Anonymous attendance access blocked');
 good(await request('attendance-location-test',{method:'POST',cookie:mCookie,body:{latitude:6.5244,longitude:3.3792,accuracy:18}}),200,'GPS testing works without office coordinates');
@@ -87,9 +91,10 @@ assert.ok(editedDetails.audits.some(x=>x.action==='member_update'));
 assert.ok(editedDetails.audits.some(x=>x.action==='payment_correction'));
 assert.ok(editedDetails.audits.some(x=>x.action==='attendance_note'));
 
+const calendarAfterTest=await request('attendance-calendar',{cookie:mCookie});good(calendarAfterTest,200,'Test sign-in appears in attendance calendar');assert.ok(calendarAfterTest.data.records.some(x=>x.is_test===true));
 const attendanceAdmin=await request('attendance-admin',{cookie:aCookie});good(attendanceAdmin,200,'Admin reads member attendance');assert.ok(attendanceAdmin.data.records.some(r=>r.id===checkin.data.record.id));
 good(await request('attendance-admin',{cookie:mCookie}),403,'Member cannot inspect office-wide attendance');
-good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{officeLatitude:6.5244,officeLongitude:3.3792,radiusMeters:150,testMode:false,scheduleEnforced:false}}),200,'Admin can switch off test mode');
+good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{officeLatitude:6.5244,officeLongitude:3.3792,radiusMeters:150,testMode:false,scheduleEnforced:true}}),200,'Admin can switch off test mode');
 good(await request('attendance-checkin',{method:'POST',cookie:aCookie,body:{latitude:6.53,longitude:3.39,accuracy:25}}),403,'Live mode rejects out-of-radius attendance');
 good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{officeLatitude:6.5244,officeLongitude:3.3792,radiusMeters:150,testMode:true,scheduleEnforced:false}}),200,'Admin restores temporary GPS test mode');
 
