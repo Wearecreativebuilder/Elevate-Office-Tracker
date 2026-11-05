@@ -164,14 +164,14 @@ label input[type=checkbox]{width:auto!important;display:inline-block!important}
 <section class="card"><h2>My attendance history</h2><div class="tablewrap"><table><thead><tr><th>Office date</th><th>Action</th><th>Recorded at (WAT)</th><th>Accuracy</th><th>Distance</th><th>Mode / GPS assessment</th></tr></thead><tbody id="myRows"></tbody></table></div></section>
 <section id="admin" class="hidden">
 <div class="grid">
-<section class="card"><h2>Admin · Office location</h2><p>Stand at the actual office before using <strong>Capture current location</strong>. Only administrators can change these shared settings.</p>
+<section class="card"><h2>Admin · Office location</h2><p><strong>Office address:</strong> No. 30 Community Road, Odogunyan, Ikorodu, Lagos.</p><p>At the office building, tap <strong>Capture current office location</strong> and then save it to activate verified sign-in. A street address alone is not accurate enough for the GPS boundary.</p>
 <div class="flex"><label>Office latitude<input id="officeLatitude" type="number" step="any" min="-90" max="90" placeholder="e.g. 6.5"></label><label>Office longitude<input id="officeLongitude" type="number" step="any" min="-180" max="180" placeholder="e.g. 3.4"></label></div>
 <label>Allowed radius (metres)<input id="radius" type="number" min="20" max="2000" step="1" value="150"></label>
-<div class="actions"><button id="captureOffice">Capture current office location</button></div>
+<div class="actions"><button id="captureOffice" class="primary">Capture current office location</button><button type="button" id="activateOffice">Save location &amp; activate attendance</button></div>
 <label><input id="testMode" type="checkbox" style="display:inline-block;width:auto;margin-right:8px" checked>Test mode: save attendance even if outside the office geofence</label>
 <label><input id="scheduleEnforced" type="checkbox" style="display:inline-block;width:auto;margin-right:8px">Enforce office attendance time schedule</label>
 <button class="primary" id="saveSettings">Save office settings</button>
-<div id="settingsMessage" class="notice warning">Office location must be configured before verified attendance can start.</div>
+<div id="settingsMessage" class="notice warning" role="status" aria-live="polite">Office GPS setup is pending. Capture the office location when physically present, then activate attendance.</div>
 <p class="hint">Official attendance must have office coordinates, test mode OFF, and the schedule enabled. These browser-reported coordinates are not independently tamper-proof.</p>
 </section>
 <section class="card"><h2>Admin · Attendance rules</h2>
@@ -231,7 +231,7 @@ async function loadCalendar(){try{const params={month:currentMonth};if(calendarM
 function drawCalendar(d){
  const [y,m]=d.month.split('-').map(Number),days=new Date(Date.UTC(y,m,0)).getUTCDate(),offset=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;
  const records=new Map((d.records||[]).map(x=>[String(x.office_date).slice(0,10),x]));
- const start=[d.approvedDate,d.liveSince].filter(Boolean).sort().at(-1)||null,weekdays=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+ const start=[d.approvedDate,d.liveSince].filter(Boolean).map(x=>String(x).slice(0,10)).sort().at(-1)||null,weekdays=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
  const parts=weekdays.map(x=>'<div class="calendar-weekday" role="columnheader">'+x+'</div>');let present=0,absent=0,testRecords=0;
  for(let i=0;i<offset;i++)parts.push('<div class="calendar-cell empty" aria-hidden="true"></div>');
  for(let day=1;day<=days;day++){
@@ -239,7 +239,7 @@ function drawCalendar(d){
   const rec=records.get(key),finished=key<d.officeDate||(key===d.officeDate&&d.officeMinutes>=960);
   let state='neutral',label=activeDay?'Not due':'Closed';
   if(rec){if(rec.is_test){state='test';label='Test';testRecords++}else{state='present';label='Signed In';present++}}
-  else if(d.liveMode&&activeDay&&start&&key>=start&&finished){state='absent';label='Absent';absent++}
+  else if(start&&activeDay&&key>=start&&finished){state='absent';label='Absent';absent++}
   else if(key===d.officeDate&&activeDay)label='Today';
   parts.push('<div class="calendar-cell '+state+(key===d.officeDate?' today':'')+(!activeDay?' weekend':'')+'" role="gridcell" aria-label="'+key+': '+label+'" title="'+key+': '+label+'"><span class="day-num">'+day+'</span><span class="day-state">'+label+'</span></div>');
  }
@@ -250,7 +250,8 @@ $('calendarPrev').onclick=()=>shiftMonth(-1);$('calendarNext').onclick=()=>shift
 
 $('gpsTest').onclick=()=>locateAndSend('attendance-location-test');$('checkin').onclick=()=>locateAndSend('attendance-checkin');$('checkout').onclick=()=>locateAndSend('attendance-checkout');
 $('captureOffice').onclick=async()=>{try{notice('settingsMessage','Requesting office device location permission…');const c=await gps();$('officeLatitude').value=c.latitude;$('officeLongitude').value=c.longitude;notice('settingsMessage','Office coordinates captured with estimated accuracy '+metres(c.accuracy)+'. Review the location, then click Save office settings.')}catch(e){notice('settingsMessage',e.message,true)}};
-$('saveSettings').onclick=async()=>{try{const lat=$('officeLatitude').value,lng=$('officeLongitude').value;const payload={officeLatitude:lat===''?null:Number(lat),officeLongitude:lng===''?null:Number(lng),radiusMeters:Number($('radius').value),scheduleEnforced:$('scheduleEnforced').checked,testMode:$('testMode').checked};await api('attendance-settings',payload);notice('settingsMessage','Office settings saved for all members.');await refresh()}catch(e){notice('settingsMessage',e.message,true)}};
+$('saveSettings').onclick=async()=>{try{const lat=$('officeLatitude').value,lng=$('officeLongitude').value;const payload={officeLatitude:lat===''?null:Number(lat),officeLongitude:lng===''?null:Number(lng),radiusMeters:Number($('radius').value),scheduleEnforced:$('scheduleEnforced').checked,testMode:$('testMode').checked};await api('attendance-settings',payload);notice('settingsMessage','Office attendance settings saved for all members.');await refresh()}catch(e){notice('settingsMessage',e.message,true)}};
+$('activateOffice').onclick=async()=>{try{let lat=$('officeLatitude').value,lng=$('officeLongitude').value;if(!lat||!lng){notice('settingsMessage','Capture your current office location first. You must be standing inside the office building.',true);return}if(!confirm('Activate official attendance at the captured office GPS coordinates? Make sure you are physically at No. 30 Community Road, Odogunyan.'))return;const payload={officeLatitude:Number(lat),officeLongitude:Number(lng),radiusMeters:Number($('radius').value),scheduleEnforced:true,testMode:false};await api('attendance-settings',payload);await refresh();notice('settingsMessage','Office GPS location saved. Verified attendance is now active during office hours.')}catch(e){notice('settingsMessage','Could not activate attendance: '+e.message,true)}};
 $('refreshAdmin').onclick=()=>refreshAdmin().catch(e=>notice('settingsMessage',e.message,true));
 $('downloadCsv').onclick=()=>{const rows=[['Name','Email','Date','Action','Checked at UTC','Accuracy m','Distance m','Test mode','Location status'],...adminRecords.map(r=>[r.name,r.email,String(r.office_date).slice(0,10),r.kind,new Date(r.checked_at).toISOString(),r.accuracy_m,r.distance_m,r.is_test,r.location_status])];const csv='\ufeff'+rows.map(row=>row.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\r\n');const link=document.createElement('a');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));link.href=url;link.download='elevate-neon-attendance.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 refresh().then(()=>{show('loading',false);show('content',true)}).catch(e=>{show('loading',false);if(e.status===401||e.status===403)show('authNeeded',true);else{show('authNeeded',true);$('authNeeded').querySelector('p').textContent=e.message}});
