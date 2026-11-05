@@ -91,10 +91,24 @@ export default async function handler(req,res){
   if(m.approval_status!=='approved')return fail(res,403,'Your account is not approved. Contact an office administrator.');
 
   if(action.startsWith('attendance-')){
-   const settingsResult=await db.query('select id,office_lat,office_lng,radius_m,schedule_enforced,test_mode from attendance_settings where id=1');
+   const settingsResult=await db.query('select id,office_lat,office_lng,radius_m,schedule_enforced,test_mode,live_since from attendance_settings where id=1');
    if(!settingsResult.rowCount)return fail(res,503,'Attendance configuration has not been initialized.');
    const settings=settingsResult.rows[0],clock=attendanceClock();
-   const config={officeConfigured:settings.office_lat!==null&&settings.office_lng!==null,radiusMeters:settings.radius_m,scheduleEnforced:settings.schedule_enforced,testMode:settings.test_mode,officeLatitude:settings.office_lat,officeLongitude:settings.office_lng,officeTimeZone:'Africa/Lagos'};
+   const config={officeConfigured:settings.office_lat!==null&&settings.office_lng!==null,radiusMeters:settings.radius_m,scheduleEnforced:settings.schedule_enforced,testMode:settings.test_mode,officeLatitude:settings.office_lat,officeLongitude:settings.office_lng,officeTimeZone:'Africa/Lagos',liveSince:settings.live_since};
+   if(action==='attendance-calendar'&&req.method==='GET'){
+    const currentMonth=clock.date.slice(0,7),month=String(req.query.month||currentMonth);
+    if(!/^\d{4}-\d{2}$/.test(month)||Number(month.slice(5))<1||Number(month.slice(5))>12)return fail(res,400,'Choose a valid calendar month.');
+    const target=req.query.memberId?String(req.query.memberId):uid;
+    if(target!==uid&&!m.is_admin)return fail(res,403,'Only administrators can view another member calendar.');
+    if(!/^[0-9a-f-]{36}$/i.test(target))return fail(res,400,'Invalid member.');
+    const who=await db.query('select name,created_at,reviewed_at from members where id=$1 and approval_status=$2',[target,'approved']);
+    if(!who.rowCount)return fail(res,404,'Member not found.');
+    const data=await db.query("select office_date,checked_at,is_test from attendance_records where member_id=$1 and office_date >= $2::date and office_date < ($2::date + interval '1 month') and kind='checkin' order by office_date",[target,month+'-01']);
+    const approved=who.rows[0].reviewed_at||who.rows[0].created_at;
+    const approvedDate=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(approved);
+    const o=Object.fromEntries(approvedDate.filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));
+    return res.json({month,officeDate:clock.date,officeMinutes:clock.minutes,timeZone:'Africa/Lagos',memberName:who.rows[0].name,memberId:target,approvedDate:o.year+'-'+o.month+'-'+o.day,liveSince:settings.live_since,liveMode:!settings.test_mode&&config.officeConfigured&&settings.schedule_enforced,records:data.rows});
+   }
    if(action==='attendance-daily'&&req.method==='GET'){
     const date=clock.date;
     const [rows,history]=await Promise.all([
@@ -130,11 +144,11 @@ export default async function handler(req,res){
    }
    if(['attendance-checkin','attendance-checkout'].includes(action)&&req.method==='POST'){
     const coords=validPosition(body);if(!coords)return fail(res,400,'Valid GPS position and accuracy are required.');
-    if(settings.schedule_enforced&&!attendanceWindow(clock))return fail(res,403,'Attendance is closed under the office time schedule.');
+    if(settings.schedule_enforced&&!attendanceWindow(clock))return fail(res,403,'Sign in is closed. Office hours are Monday–Thursday, 11:30 AM–4:00 PM, and Friday, 2:30 PM–4:00 PM (Nigeria time). Weekends are closed.');
     const verdict=locationResult(settings,coords);
     if(!settings.test_mode){
-     if(!config.officeConfigured)return fail(res,409,'Administrator must configure office GPS location before live attendance.');
-     if(!verdict.withinRadius)return fail(res,403,'Location is outside the office radius or GPS accuracy is insufficient.');
+     if(!config.officeConfigured)return fail(res,409,'Office location has not been set up. Please contact your office administrator before signing in.');
+     if(!verdict.withinRadius)return fail(res,403,'Sign in failed: your device is outside the allowed office area or the GPS signal is too inaccurate. '+(verdict.distanceMeters===null?'':('Detected distance: '+Math.round(verdict.distanceMeters)+' m. Office limit: '+settings.radius_m+' m. '))+'Move closer to the office and enable precise location.');
     }
     const kind=action==='attendance-checkout'?'checkout':'checkin';
     if(kind==='checkout'){
@@ -143,7 +157,7 @@ export default async function handler(req,res){
     }
     try{
      const created=await db.query("insert into attendance_records(member_id,checked_at,office_date,kind,latitude,longitude,accuracy_m,distance_m,within_radius,is_test,location_status) values($1,now(),$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id,kind,checked_at,office_date,accuracy_m,distance_m,within_radius,is_test,location_status",[uid,clock.date,kind,coords.lat,coords.lng,coords.accuracy,verdict.distanceMeters,verdict.withinRadius,settings.test_mode,verdict.locationStatus]);
-     return res.status(201).json({record:created.rows[0],message:settings.test_mode?'Test attendance saved. Location has not been independently verified.':'Attendance recorded using the configured office geofence.'});
+     return res.status(201).json({record:created.rows[0],message:settings.test_mode?'Test sign-in saved. This is not verified attendance.':kind==='checkin'?'Sign in successful! Your attendance has been recorded.':'Sign out successful! Your departure has been recorded.'});
     }catch(e){if(e.code==='23505')return fail(res,409,'You already recorded this attendance action today.');throw e}
    }
    if(!m.is_admin)return fail(res,403,'Administrator access required.');
@@ -159,7 +173,8 @@ export default async function handler(req,res){
     const radius=Number(body.radiusMeters);
     if(!Number.isInteger(radius)||radius<20||radius>2000||typeof body.scheduleEnforced!=='boolean'||typeof body.testMode!=='boolean')return fail(res,400,'Set a radius of 20–2000 metres and valid attendance mode switches.');
     if(!body.testMode&&!coords)return fail(res,400,'Set the office GPS coordinates before enabling live attendance.');
-    const updated=await db.query('update attendance_settings set office_lat=$1,office_lng=$2,radius_m=$3,schedule_enforced=$4,test_mode=$5,updated_at=now(),updated_by=$6 where id=1 returning id',[coords?.lat??null,coords?.lng??null,radius,body.scheduleEnforced,body.testMode,uid]);
+    if(!body.testMode&&!body.scheduleEnforced)return fail(res,400,'Enable office hours when switching to live attendance.');
+    const updated=await db.query('update attendance_settings set office_lat=$1,office_lng=$2,radius_m=$3,schedule_enforced=$4,test_mode=$5,live_since=case when $5=false and live_since is null then (now() at time zone 'Africa/Lagos')::date else live_since end,updated_at=now(),updated_by=$6 where id=1 returning id',[coords?.lat??null,coords?.lng??null,radius,body.scheduleEnforced,body.testMode,uid]);
     if(!updated.rowCount)return fail(res,503,'Attendance settings unavailable.');
     return res.json({ok:true});
    }
