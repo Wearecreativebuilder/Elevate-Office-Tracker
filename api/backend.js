@@ -18,6 +18,7 @@ async function session(req){const token=cookie(req);if(!token)return null;try{co
 async function jwt(id){return await new SignJWT({}).setProtectedHeader({alg:'HS256'}).setIssuer('elevate-office').setAudience('members').setSubject(id).setIssuedAt().setExpirationTime('7d').sign(key())}
 function sanitize(m){return{id:m.id,name:m.name,email:m.email,phone:m.phone,rank:m.rank,isAdmin:m.is_admin,teamId:m.team_id,sponsorId:m.sponsor_id,sponsorCode:m.sponsor_code,approvalStatus:m.approval_status,createdAt:m.created_at}}
 function roleDue(rank){return rank==='Member'?0:['Distributor','Manager'].includes(rank)?10000:['Senior Manager','Executive Manager','Director','Emirald Director'].includes(rank)?25000:null}
+function responsibility(expected,received){return expected===null?{status:'not_configured',required:false}:Number(expected)===0?{status:'exempt',required:false}:Number(received)>=Number(expected)?{status:'paid',required:true}:{status:Number(received)>0?'partially_paid':'due',required:true}}
 function validUrl(value){try{const u=new URL(value);return u.protocol==='https:'&&['fiverr.com','www.fiverr.com'].includes(u.hostname)&&/^\/[A-Za-z0-9_-]+\/?$/.test(u.pathname)}catch{return false}}
 const statuses=['Member','Distributor','Manager','Senior Manager','Executive Manager','Director','Emirald Director'];
 const attendanceClock=()=>{const p=Object.fromEntries(new Intl.DateTimeFormat('en-GB',{timeZone:'Africa/Lagos',weekday:'short',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).filter(x=>x.type!=='literal').map(x=>[x.type,x.value]));return {date:p.year+'-'+p.month+'-'+p.day,day:p.weekday,minutes:Number(p.hour)*60+Number(p.minute)}};
@@ -178,7 +179,7 @@ export default async function handler(req,res){
     db.query('select coalesce(sum(amount),0) as total from payments where member_id=$1 and for_month=$2',[uid,period])
    ]);
    const expected=override.rows[0]?.amount??roleDue(m.rank),received=Number(paid.rows[0].total);
-   return res.status(200).json({member:sanitize(m),teamName:team.rows[0]?.name||null,sponsorName:sponsor.rows[0]?.name||null,directDownlines:direct.rows,totalDownlines:downlines.rows[0].total,accounts:accounts.rows,payments:payments.rows,attendance:attendance.rows,month:yy+'-'+mm,expected:expected===null?null:Number(expected),received,outstanding:expected===null?null:Math.max(0,Number(expected)-received)});
+   return res.status(200).json({member:sanitize(m),teamName:team.rows[0]?.name||null,sponsorName:sponsor.rows[0]?.name||null,directDownlines:direct.rows,totalDownlines:downlines.rows[0].total,accounts:accounts.rows,payments:payments.rows,attendance:attendance.rows,month:yy+'-'+mm,expected:expected===null?null:Number(expected),received,outstanding:expected===null?null:Math.max(0,Number(expected)-received),responsibility:responsibility(expected,received),responsibilitySource:override.rowCount?'monthly_override':'office_rank'});
   }
   if(action==='profile'&&req.method==='POST'){
    const name=String(body.name||'').trim(),phone=String(body.phone||'').trim();
@@ -265,12 +266,27 @@ export default async function handler(req,res){
    return res.json({requests:rows.rows});
   }
   if(action==='admin-review'&&req.method==='POST'){
-   const id=String(body.id||''),decision=String(body.decision||'');
+   const id=String(body.id||''),decision=String(body.decision||''),rank=decision==='approved'?String(body.rank||'Member'):'Member';
+   if(decision==='approved'&&!statuses.includes(rank))return fail(res,400,'Choose a valid office status before approving.');
    if(!/^[0-9a-f-]{36}$/i.test(id)||!['approved','rejected'].includes(decision))return fail(res,400,'Invalid approval decision.');
    if(id===uid)return fail(res,400,'You cannot review your own administrator account.');
-   const result=await db.query("update members set approval_status=$2,reviewed_by=$3,reviewed_at=now() where id=$1 and approval_status='pending' returning id,name,email,approval_status",[id,decision,uid]);
+   const result=await db.query("update members set approval_status=$2,rank=case when $2='approved' then $4 else rank end,reviewed_by=$3,reviewed_at=now() where id=$1 and approval_status='pending' returning id,name,email,rank,approval_status",[id,decision,uid,rank]);
    if(!result.rowCount)return fail(res,409,'This application has already been reviewed or was not found.');
-   return res.json({member:result.rows[0]});
+   return res.json({member:result.rows[0],monthlyResponsibility:decision==='approved'?roleDue(result.rows[0].rank):null});
+  }
+  if(action==='admin-responsibilities'&&req.method==='GET'){
+   const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit'}).formatToParts(new Date());
+   const nowMonth=parts.find(x=>x.type==='year').value+'-'+parts.find(x=>x.type==='month').value;
+   const month=String(req.query.month||nowMonth);
+   if(!/^\\d{4}-\\d{2}$/.test(month)||Number(month.slice(5))<1||Number(month.slice(5))>12)return fail(res,400,'Choose a valid YYYY-MM month.');
+   const r=await db.query(`select m.id,m.name,m.email,m.rank,m.is_admin,override.amount as custom_amount,coalesce(p.total,0) as paid
+     from members m
+     left join monthly_responsibilities override on override.member_id=m.id and override.month=$1::date
+     left join lateral (select coalesce(sum(amount),0) as total from payments where member_id=m.id and for_month=$1::date) p on true
+     where m.approval_status='approved' order by m.name`,[month+'-01']);
+   const members=r.rows.map(x=>{const amount=x.custom_amount!==null?Number(x.custom_amount):roleDue(x.rank),paid=Number(x.paid),state=responsibility(amount,paid);return{id:x.id,name:x.name,email:x.email,rank:x.rank,isAdmin:x.is_admin,expected:amount,paid,outstanding:amount===null?null:Math.max(0,amount-paid),status:state.status,required:state.required,source:x.custom_amount!==null?'monthly_override':'office_rank'}});
+   const totals={members:members.length,required:members.filter(x=>x.required).length,exempt:members.filter(x=>x.status==='exempt').length,due:members.filter(x=>x.status==='due'||x.status==='partially_paid').length,paid:members.filter(x=>x.status==='paid').length,expected:members.reduce((a,x)=>a+(x.expected||0),0),received:members.reduce((a,x)=>a+x.paid,0),outstanding:members.reduce((a,x)=>a+(x.outstanding||0),0)};
+   return res.json({month,totals,members});
   }
   if(action==='admin-members'&&req.method==='GET'){
    const rows=await db.query("select id,name,email,phone,rank,team_id,sponsor_id,is_admin,approval_status,created_at from members where approval_status='approved' order by created_at desc limit 500");
