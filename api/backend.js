@@ -250,15 +250,15 @@ export default async function handler(req,res){
   }
   if(action==='due-submit'&&req.method==='POST'){
    if(roleDue(m.rank)===0)return fail(res,403,'Financial dues are available to Distributor rank and above.');
-   const month=String(body.month||''),date=String(body.paidOn||''),amount=Number(body.amount),reference=String(body.reference||'').trim(),note=String(body.note||'').trim();
-   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date||date>attendanceClock().date||!Number.isFinite(amount)||amount<=0||amount>100000000||reference.length<4||reference.length>120||note.length>300)return fail(res,400,'Enter a valid month, past payment date, amount, and transaction reference.');
+   const month=String(body.month||''),date=String(body.paidOn||''),amount=Number(body.amount),reference='AUTO-'+randomUUID(),note=String(body.note||'').trim();
+   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date||date>attendanceClock().date||!Number.isFinite(amount)||amount<=0||amount>100000000||note.length>300)return fail(res,400,'Enter a valid contribution month, payment date, and amount.');
    const ov=await db.query('select amount from monthly_responsibilities where member_id=$1 and month=$2::date',[uid,month+'-01']);
    const due=ov.rowCount?Number(ov.rows[0].amount):roleDue(m.rank);
    if(due===null||due<=0)return fail(res,403,'No dues are required for this period. Contact the office administrator.');
    try{
     const r=await db.query("insert into member_due_submissions(member_id,for_month,paid_on,amount,payment_reference,note) values($1,$2::date,$3::date,$4,$5,$6) returning id,status,submitted_at",[uid,month+'-01',date,Math.round(amount*100)/100,reference,note]);
     return res.status(201).json({submission:r.rows[0],message:'Submission pending administrator approval. Your balance is unchanged until it is confirmed.'});
-   }catch(e){if(e.code==='23505')return fail(res,409,'A payment with this reference is already pending or approved.');throw e}
+   }catch(e){if(e.code==='23505')return fail(res,409,'Please retry your submission.');throw e}
   }
   if(action==='office-financial-summary'&&req.method==='GET'){
    if(!m.is_admin&&roleDue(m.rank)===0)return fail(res,403,'Office finances are available to Distributor rank and above.');
@@ -291,7 +291,7 @@ export default async function handler(req,res){
     const item=found.rows[0];if(item.status!=='pending'){await client.query('rollback');return fail(res,409,'Submission already reviewed.')}
     let paymentId=null;
     if(decision==='approved'){
-     const recorded=await client.query("insert into payments(member_id,amount,paid_on,for_month,notes,recorded_by) values($1,$2,$3,$4,$5,$6) returning id",[item.member_id,item.amount,item.paid_on,item.for_month,('Confirmed submission / Ref: '+item.payment_reference+' / '+item.note).slice(0,300),uid]);
+     const recorded=await client.query("insert into payments(member_id,amount,paid_on,for_month,notes,recorded_by) values($1,$2,$3,$4,$5,$6) returning id",[item.member_id,item.amount,item.paid_on,item.for_month,('Member-submitted dues / '+item.note).slice(0,300),uid]);
      paymentId=recorded.rows[0].id;
     }
     await client.query('update member_due_submissions set status=$2,reviewed_by=$3,reviewed_at=now(),review_note=$4,payment_id=$5 where id=$1',[id,decision,uid,note,paymentId]);
