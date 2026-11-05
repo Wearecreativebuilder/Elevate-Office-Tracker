@@ -94,8 +94,8 @@ a.nav,.nav{transition:background .16s,color .16s;min-height:42px}
 dialog::backdrop{background:rgba(4,12,32,.75)}
 @media(max-width:750px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}.layout{grid-template-columns:1fr!important}.teamcards{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}.tools>*{flex:1;min-width:0!important}.tools select,.tools input{width:100%!important}}
 
-</style></head>
-<body><div class="shell"><aside class="side"><div class="brand">◈ ELEVATE<small>OFFICE TRACKING SYSTEM</small></div><nav><a class="nav" href="./index.html">◫ &nbsp; Finance</a><a class="nav" href="./attendance.html">◷ &nbsp; Attendance</a><a class="nav active" href="./teams.html">♧ &nbsp; Teams & Downlines</a><a class="nav" href="./member.html">▣ &nbsp; Member portal</a></nav><div class="sidefoot">Office organisation<br>Team leads · Sponsors · Downlines</div></aside>
+body:not([data-admin-access]) .shell{visibility:hidden}body[data-admin-access="denied"] .shell{display:none!important}#teamsAccessMessage{max-width:570px;margin:8vh auto;padding:28px;border:1px solid var(--e-border);border-radius:18px;background:var(--e-panel)}body:not([data-admin-access="denied"]) #teamsAccessMessage{display:none}</style></head>
+<body><div id="teamsAccessMessage"><h2>Administrator access required</h2><p>Team management is available to office administrators. Members can see their own teams and downlines in their personal dashboard.</p><a href="./member.html">Back to member dashboard</a></div><div class="shell"><aside class="side"><div class="brand">◈ ELEVATE<small>OFFICE TRACKING SYSTEM</small></div><nav><a class="nav" href="./index.html">◫ &nbsp; Finance</a><a class="nav" href="./attendance.html">◷ &nbsp; Attendance</a><a class="nav active" href="./teams.html">♧ &nbsp; Teams & Downlines</a><a class="nav" href="./member.html">▣ &nbsp; Member portal</a></nav><div class="sidefoot">Office organisation<br>Team leads · Sponsors · Downlines</div></aside>
 <main class="main"><div class="top"><div><span class="eyebrow">Member network</span><h1>Teams & downlines</h1><p class="muted">Organise office members, sponsors, team leads and reporting relationships.</p></div><a class="btn primary" href="./member.html">Manage office members</a></div>
 <div class="stats"><div class="stat"><label>Office members</label><strong id="countMembers">0</strong></div><div class="stat"><label>Teams</label><strong id="countTeams">0</strong></div><div class="stat"><label>Sponsored members</label><strong id="countSponsored">0</strong></div><div class="stat"><label>Without a sponsor</label><strong id="countRoots">0</strong></div></div>
 <div class="layout">
@@ -170,4 +170,4 @@ b.addEventListener('click',()=>{root.dataset.theme=root.dataset.theme==='dark'?'
 update();const mount=document.querySelector('.top .actions')||document.querySelector('header nav')||document.querySelector('.top')||document.querySelector('header')||document.querySelector('.side');if(mount)mount.appendChild(b);
 })();
 </script>
-</body></html>
+<script>(async()=>{try{const r=await fetch('/api/backend?action=me',{credentials:'same-origin',cache:'no-store'});const d=await r.json();document.body.dataset.adminAccess=r.ok&&d.member?.isAdmin?'approved':'denied'}catch{document.body.dataset.adminAccess='denied'}})();</script></body></html>
