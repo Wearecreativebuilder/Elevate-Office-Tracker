@@ -198,8 +198,8 @@ export default async function handler(req,res){
     db.query('select amount from monthly_responsibilities where member_id=$1 and month=$2',[uid,period]),
     db.query('select coalesce(sum(amount),0) as total from payments where member_id=$1 and for_month=$2',[uid,period])
    ]);
-   const expected=override.rows[0]?.amount??roleDue(m.rank),received=Number(paid.rows[0].total);
-   return res.status(200).json({member:sanitize(m),teamName:team.rows[0]?.name||null,sponsorName:sponsor.rows[0]?.name||null,directDownlines:direct.rows,totalDownlines:downlines.rows[0].total,accounts:accounts.rows,payments:payments.rows,attendance:attendance.rows,month:yy+'-'+mm,expected:expected===null?null:Number(expected),received,outstanding:expected===null?null:Math.max(0,Number(expected)-received),responsibility:responsibility(expected,received),responsibilitySource:override.rowCount?'monthly_override':'office_rank'});
+   const expected=override.rows[0]?.amount??roleDue(m.rank),received=Number(paid.rows[0].total),canViewFinance=m.is_admin||roleDue(m.rank)!==0;
+   return res.status(200).json({member:sanitize(m),teamName:team.rows[0]?.name||null,sponsorName:sponsor.rows[0]?.name||null,directDownlines:direct.rows,totalDownlines:downlines.rows[0].total,accounts:accounts.rows,payments:canViewFinance?payments.rows:[],attendance:attendance.rows,month:yy+'-'+mm,canViewFinance,expected:canViewFinance?(expected===null?null:Number(expected)):null,received:canViewFinance?received:null,outstanding:canViewFinance?(expected===null?null:Math.max(0,Number(expected)-received)):null,responsibility:canViewFinance?responsibility(expected,received):null,responsibilitySource:canViewFinance?(override.rowCount?'monthly_override':'office_rank'):null});
   }
   if(action==='profile'&&req.method==='POST'){
    const name=String(body.name||'').trim(),phone=String(body.phone||'').trim();
@@ -224,9 +224,63 @@ export default async function handler(req,res){
    if(!changed.rowCount)return fail(res,409,'Sponsor is already assigned.');
    return res.json({ok:true});
   }
+
+  if(action==='my-due-submissions'&&req.method==='GET'){
+   if(roleDue(m.rank)===0)return fail(res,403,'Financial dues are available to Distributor rank and above.');
+   const r=await db.query("select id,for_month,paid_on,amount,payment_reference,note,status,submitted_at,reviewed_at,review_note from member_due_submissions where member_id=$1 order by submitted_at desc limit 100",[uid]);
+   return res.json({submissions:r.rows});
+  }
+  if(action==='due-submit'&&req.method==='POST'){
+   if(roleDue(m.rank)===0)return fail(res,403,'Financial dues are available to Distributor rank and above.');
+   const month=String(body.month||''),date=String(body.paidOn||''),amount=Number(body.amount),reference=String(body.reference||'').trim(),note=String(body.note||'').trim();
+   if(!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)||!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(Date.parse(date+'T00:00:00Z'))||new Date(date+'T00:00:00Z').toISOString().slice(0,10)!==date||date>attendanceClock().date||!Number.isFinite(amount)||amount<=0||amount>100000000||reference.length<4||reference.length>120||note.length>300)return fail(res,400,'Enter a valid month, past payment date, amount, and transaction reference.');
+   const ov=await db.query('select amount from monthly_responsibilities where member_id=$1 and month=$2::date',[uid,month+'-01']);
+   const due=ov.rowCount?Number(ov.rows[0].amount):roleDue(m.rank);
+   if(due===null||due<=0)return fail(res,403,'No dues are required for this period. Contact the office administrator.');
+   try{
+    const r=await db.query("insert into member_due_submissions(member_id,for_month,paid_on,amount,payment_reference,note) values($1,$2::date,$3::date,$4,$5,$6) returning id,status,submitted_at",[uid,month+'-01',date,Math.round(amount*100)/100,reference,note]);
+    return res.status(201).json({submission:r.rows[0],message:'Submission pending administrator approval. Your balance is unchanged until it is confirmed.'});
+   }catch(e){if(e.code==='23505')return fail(res,409,'A payment with this reference is already pending or approved.');throw e}
+  }
+  if(action==='office-financial-summary'&&req.method==='GET'){
+   if(roleDue(m.rank)===0)return fail(res,403,'Office finances are available to Distributor rank and above.');
+   const part=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit'}).formatToParts(new Date());
+   const year=part.find(x=>x.type==='year').value,month=part.find(x=>x.type==='month').value,period=year+'-'+month+'-01';
+   const [r,ov,verified]=await Promise.all([
+    db.query("select coalesce(sum(amount),0) as received from payments"),
+    db.query('select amount from monthly_responsibilities where member_id=$1 and month=$2::date',[uid,period]),
+    db.query("select coalesce(sum(amount),0) as member_paid from payments where member_id=$1 and for_month=$2::date",[uid,period])
+   ]);
+   const expected=ov.rowCount?Number(ov.rows[0].amount):roleDue(m.rank),paid=Number(verified.rows[0].member_paid);
+   return res.json({month:year+'-'+month,totalVerifiedContributions:Number(r.rows[0].received),myExpected:expected,myPaid:paid,myOutstanding:Math.max(0,(expected||0)-paid),scope:'verified_contributions_only'});
+  }
   if(action==='team-list'&&req.method==='GET'){const list=await db.query('select id,name,leader_id from teams order by name');return res.json({teams:list.rows})}
   if(!m.is_admin)return fail(res,403,'Administrator access required.');
 
+
+  if(action==='admin-due-submissions'&&req.method==='GET'){
+   const r=await db.query("select s.id,s.member_id,m.name,m.email,m.rank,s.for_month,s.paid_on,s.amount,s.payment_reference,s.note,s.status,s.submitted_at,s.reviewed_at,s.review_note from member_due_submissions s join members m on m.id=s.member_id order by case when s.status='pending' then 0 else 1 end,s.submitted_at desc limit 250");
+   return res.json({submissions:r.rows,pending:r.rows.filter(x=>x.status==='pending').length});
+  }
+  if(action==='admin-due-review'&&req.method==='POST'){
+   const id=String(body.id||''),decision=String(body.decision||''),note=String(body.note||'').trim();
+   if(!/^[0-9a-f-]{36}$/i.test(id)||!['approved','rejected'].includes(decision)||note.length>300||(decision==='rejected'&&note.length<6))return fail(res,400,'Provide a valid decision and an explanation for rejected submissions.');
+   const client=await db.connect();
+   try{
+    await client.query('begin');
+    const found=await client.query('select id,member_id,amount,paid_on,for_month,payment_reference,note,status from member_due_submissions where id=$1 for update',[id]);
+    if(!found.rowCount){await client.query('rollback');return fail(res,404,'Submission not found.')}
+    const item=found.rows[0];if(item.status!=='pending'){await client.query('rollback');return fail(res,409,'Submission already reviewed.')}
+    let paymentId=null;
+    if(decision==='approved'){
+     const recorded=await client.query("insert into payments(member_id,amount,paid_on,for_month,notes,recorded_by) values($1,$2,$3,$4,$5,$6) returning id",[item.member_id,item.amount,item.paid_on,item.for_month,('Confirmed submission / Ref: '+item.payment_reference+' / '+item.note).slice(0,300),uid]);
+     paymentId=recorded.rows[0].id;
+    }
+    await client.query('update member_due_submissions set status=$2,reviewed_by=$3,reviewed_at=now(),review_note=$4,payment_id=$5 where id=$1',[id,decision,uid,note,paymentId]);
+    await client.query('insert into admin_audit_log(admin_id,member_id,action,record_id,old_values,new_values,reason) values($1,$2,$3,$4,$5,$6,$7)',[uid,item.member_id,'monthly_due_review',id,JSON.stringify({status:'pending',amount:item.amount,reference:item.payment_reference}),JSON.stringify({status:decision,paymentId}),note||'Administrator confirmed receipt']);
+    await client.query('commit');return res.json({ok:true,status:decision,paymentId});
+   }catch(e){await client.query('rollback');throw e}finally{client.release()}
+  }
   if(action==='admin-member-details'&&req.method==='GET'){
    const id=String(req.query.id||'');
    if(!/^[0-9a-f-]{36}$/i.test(id))return fail(res,400,'Invalid member identifier.');
