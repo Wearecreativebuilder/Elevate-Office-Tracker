@@ -94,7 +94,57 @@ a.nav,.nav{transition:background .16s,color .16s;min-height:42px}
 dialog::backdrop{background:rgba(4,12,32,.75)}
 @media(max-width:750px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}.layout{grid-template-columns:1fr!important}.teamcards{grid-template-columns:repeat(auto-fill,minmax(145px,1fr))}.tools>*{flex:1;min-width:0!important}.tools select,.tools input{width:100%!important}}
 
-body:not([data-admin-access]) .shell{visibility:hidden}body[data-admin-access="denied"] .shell{display:none!important}#teamsAccessMessage{max-width:570px;margin:8vh auto;padding:28px;border:1px solid var(--e-border);border-radius:18px;background:var(--e-panel)}body:not([data-admin-access="denied"]) #teamsAccessMessage{display:none}</style></head>
+body:not([data-admin-access]) .shell{visibility:hidden}body[data-admin-access="denied"] .shell{display:none!important}#teamsAccessMessage{max-width:570px;margin:8vh auto;padding:28px;border:1px solid var(--e-border);border-radius:18px;background:var(--e-panel)}body:not([data-admin-access="denied"]) #teamsAccessMessage{display:none}
+/* Mobile viewport containment — avoid side gaps caused by min-content grids and long values */
+html{width:100%;max-width:100%;overflow-x:clip}
+body{width:100%;max-width:100%;min-width:0!important;overflow-x:clip;margin:0}
+main,.main,.shell,#dashboard,#admin,#content,#memberFinance,.section,.layout,.twocol,.grid,.grid2,.cards,.stats,.panel,.card,.row,.tablewrap{min-width:0;max-width:100%;box-sizing:border-box}
+.shell{width:100%;grid-template-columns:minmax(0,235px) minmax(0,1fr)}
+.main,main{width:100%;min-width:0;box-sizing:border-box}
+.grid>*,.grid2>*,.cards>*,.stats>*,.twocol>*,.layout>*,.row>*,.flex>*,.top>*,.toolbar>*,.form>*,.fields>*,.panel>*,.card>*{min-width:0}
+.tablewrap{width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+table{max-width:none}
+p,h1,h2,h3,label,.brand,.notice,.pill,.muted,.stat strong,.metric strong,.account,.calendar-summary{overflow-wrap:anywhere;word-break:normal}
+input,select,textarea{max-width:100%;min-width:0}
+img,svg,video,canvas{max-width:100%;height:auto}
+@media(max-width:900px){
+ .shell{display:block!important;width:100%;min-width:0}
+ .side{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden}
+ .side nav{min-width:0}
+ .main,main{width:100%;max-width:100%;margin-inline:auto}
+}
+@media(max-width:600px){
+ html,body{width:100%;max-width:100%;overflow-x:clip}
+ .main,main{padding-inline:12px!important}
+ .panel,.card,.metric,.stat{max-width:100%}
+ .grid,.grid2,.cards,.stats,.twocol,.layout,.form,.fields{width:100%;min-width:0}
+ .row,.top,.toolbar,.actions{max-width:100%;min-width:0}
+ .row>*,.top>*,.toolbar>*,.actions>*{max-width:100%;min-width:0}
+ .tablewrap{margin-inline:0!important}
+ #financeAccessMessage,#teamsAccessMessage{max-width:calc(100% - 24px);margin-inline:12px}
+ input,select,textarea{font-size:16px!important}
+}
+@media(max-width:360px){
+ .main,main{padding-inline:10px!important}
+ .panel,.card{padding:13px!important}
+ .grid,.cards,.stats{grid-template-columns:minmax(0,1fr)!important}
+ .top .actions{width:100%}
+}
+
+/* Teams: downline tables scroll inside their panel only */
+@media(max-width:900px){.side nav{max-width:100%;overflow-x:auto;overflow-y:hidden}}
+@media(max-width:600px){
+ .top{align-items:stretch}
+ .top .btn{max-width:100%;text-align:center}
+ .stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .layout{grid-template-columns:minmax(0,1fr)!important}
+ .teamcards{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .tools{display:flex;flex-wrap:wrap}
+ .tools>*{flex:1 1 140px;min-width:0!important}
+}
+@media(max-width:350px){.stats,.teamcards{grid-template-columns:minmax(0,1fr)!important}}
+
+</style></head>
 <body><div id="teamsAccessMessage"><h2>Administrator access required</h2><p>Team management is available to office administrators. Members can see their own teams and downlines in their personal dashboard.</p><a href="./member.html">Back to member dashboard</a></div><div class="shell"><aside class="side"><div class="brand">◈ ELEVATE<small>OFFICE TRACKING SYSTEM</small></div><nav><a class="nav" href="./index.html">◫ &nbsp; Finance</a><a class="nav" href="./attendance.html">◷ &nbsp; Attendance</a><a class="nav active" href="./teams.html">♧ &nbsp; Teams & Downlines</a><a class="nav" href="./member.html">▣ &nbsp; Member portal</a></nav><div class="sidefoot">Office organisation<br>Team leads · Sponsors · Downlines</div></aside>
 <main class="main"><div class="top"><div><span class="eyebrow">Member network</span><h1>Teams & downlines</h1><p class="muted">Organise office members, sponsors, team leads and reporting relationships.</p></div><a class="btn primary" href="./member.html">Manage office members</a></div>
 <div class="stats"><div class="stat"><label>Office members</label><strong id="countMembers">0</strong></div><div class="stat"><label>Teams</label><strong id="countTeams">0</strong></div><div class="stat"><label>Sponsored members</label><strong id="countSponsored">0</strong></div><div class="stat"><label>Without a sponsor</label><strong id="countRoots">0</strong></div></div>
