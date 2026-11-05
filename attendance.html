@@ -186,19 +186,68 @@ label input[type=checkbox]{width:auto!important;display:inline-block!important}
 </div></main>
 <script>
 (()=>{'use strict';
-const $=id=>document.getElementById(id);let config=null,member=null,adminRecords=[];
+const $=id=>document.getElementById(id);let config=null,member=null,adminRecords=[],currentMonth=null,calendarMemberId='';
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const show=(id,on)=>$(id).classList.toggle('hidden',!on);
 const time=x=>new Date(x).toLocaleString('en-GB',{timeZone:'Africa/Lagos',hour12:false});
 const metres=x=>x===null||x===undefined?'—':Number(x).toFixed(1)+' m';
-const notice=(id,text,error=false)=>{$(id).textContent=text;$(id).className='notice'+(error?' error':'')};
-async function api(action,payload){const response=await fetch('/api/backend?action='+encodeURIComponent(action),{method:payload===undefined?'GET':'POST',credentials:'same-origin',headers:payload===undefined?{}:{'Content-Type':'application/json'},body:payload===undefined?undefined:JSON.stringify(payload),cache:'no-store'});const result=await response.json().catch(()=>({error:'Unexpected server response'}));if(!response.ok)throw Object.assign(new Error(result.error||'Request failed'),{status:response.status});return result;}
+const notice=(id,text,error=false)=>{$(id).textContent=text;$(id).className='notice'+(error?' error':' success')};
+async function api(action,payload,params){const query=new URLSearchParams({action,...(params||{})});const response=await fetch('/api/backend?'+query.toString(),{method:payload===undefined?'GET':'POST',credentials:'same-origin',headers:payload===undefined?{}:{'Content-Type':'application/json'},body:payload===undefined?undefined:JSON.stringify(payload),cache:'no-store'});const result=await response.json().catch(()=>({error:'Unexpected server response'}));if(!response.ok)throw Object.assign(new Error(result.error||'Request failed'),{status:response.status});return result;}
 function gps(){return new Promise((resolve,reject)=>{if(!window.isSecureContext||!navigator.geolocation){reject(Error('HTTPS and browser location permission are required.'));return}navigator.geolocation.getCurrentPosition(p=>resolve({latitude:p.coords.latitude,longitude:p.coords.longitude,accuracy:p.coords.accuracy}),e=>reject(Error('Unable to get your location: '+e.message)),{enableHighAccuracy:true,timeout:25000,maximumAge:0})})}
-function renderRecords(records,admin=false){const id=admin?'adminRows':'myRows';$(id).innerHTML=records.map(r=>'<tr>'+(admin?'<td>'+esc(r.name)+'<br><small>'+esc(r.email)+'</small></td>':'')+'<td>'+esc(String(r.office_date).slice(0,10))+'</td><td>'+esc(r.kind)+'</td><td>'+esc(time(r.checked_at))+'</td><td>'+esc(metres(r.accuracy_m))+'</td><td>'+esc(metres(r.distance_m))+'</td><td>'+esc((r.is_test?'TEST · ':'')+r.location_status)+'</td></tr>').join('')||'<tr><td colspan="'+(admin?7:6)+'" class="muted">No attendance records yet</td></tr>'}
-function renderConfig(){const test=config.testMode,scheduled=config.scheduleEnforced;show('admin',member.isAdmin);$('myName').textContent=member.name;$('mode').textContent=test?'TEST MODE':'LIVE';$('modeNotice').textContent=(test?'TEST MODE ACTIVE — recorded attendance is not official proof of presence. ':'LIVE attendance mode. ')+(scheduled?'Office schedule is enforced.':'Time restrictions are temporarily OFF so members can test anytime.');$('officeDescription').textContent=config.officeConfigured?'Office location configured. Radius: '+config.radiusMeters+' m. GPS may be inaccurate or spoofed.':'Office location has not been configured. GPS tests can capture device location, but office distance cannot be calculated until an admin saves office coordinates.';if(member.isAdmin){$('officeLatitude').value=config.officeLatitude??'';$('officeLongitude').value=config.officeLongitude??'';$('radius').value=config.radiusMeters;$('scheduleEnforced').checked=scheduled;$('testMode').checked=test;}}
-async function refresh(){const d=await api('attendance-info');config=d.config;member=d.member;$('officeDate').textContent=d.officeDate;renderConfig();renderRecords(d.records);if(member.isAdmin)await refreshAdmin()}
+function renderRecords(records,admin=false){const id=admin?'adminRows':'myRows';$(id).innerHTML=records.map(r=>'<tr>'+(admin?'<td>'+esc(r.name)+'<br><small>'+esc(r.email)+'</small></td>':'')+'<td>'+esc(String(r.office_date).slice(0,10))+'</td><td>'+esc(r.kind==='checkin'?'Sign In':'Sign Out')+'</td><td>'+esc(time(r.checked_at))+'</td><td>'+esc(metres(r.accuracy_m))+'</td><td>'+esc(metres(r.distance_m))+'</td><td>'+esc((r.is_test?'TEST · ':'')+r.location_status)+'</td></tr>').join('')||'<tr><td colspan="'+(admin?7:6)+'" class="muted">No attendance records yet</td></tr>'}
+function renderConfig(){
+ const active=config.liveReady;
+ show('admin',member.isAdmin);show('calendarAdminControls',member.isAdmin);
+ $('myName').textContent=member.name;$('mode').textContent=active?'ACTIVE':'GPS setup needed';
+ $('modeNotice').textContent=active?'Office sign-in is active. The office hours and location radius are enforced.':'Office schedule is active, but the office GPS pin has not been captured. Sign-in will be refused until an administrator saves the actual office coordinates.';
+ $('officeDescription').textContent=(config.officeAddress||'Office address not specified')+'. '+(config.officeConfigured?'Office GPS geofence set: '+config.radiusMeters+' m radius.':'Precise GPS location is not yet set. Ask the administrator to capture the location from inside the office.');
+ if(member.isAdmin){$('officeLatitude').value=config.officeLatitude??'';$('officeLongitude').value=config.officeLongitude??'';$('radius').value=config.radiusMeters;$('scheduleEnforced').checked=config.scheduleEnforced;$('testMode').checked=config.testMode;}
+ if(!active)notice('feedback','Office GPS verification is awaiting administrator setup. The address is saved, but no verified sign-in can be accepted until the office location is captured.',true);
+}
+async function refresh(){
+ const d=await api('attendance-info');config=d.config;member=d.member;$('officeDate').textContent=d.officeDate;
+ renderConfig();renderRecords(d.records);if(!currentMonth)currentMonth=d.officeDate.slice(0,7);$('calendarMonth').value=currentMonth;
+ if(member.isAdmin){await refreshAdmin();await initCalendarMembers()}await loadCalendar();
+}
 async function refreshAdmin(){const data=await api('attendance-admin');adminRecords=data.records;renderRecords(adminRecords,true)}
-async function locateAndSend(action){const b=$(action==='attendance-location-test'?'gpsTest':action==='attendance-checkin'?'checkin':'checkout');b.disabled=true;notice('feedback','Requesting device GPS permission…');try{const coords=await gps();$('accuracy').textContent=metres(coords.accuracy);notice('feedback','Location captured; checking against saved office settings…');const result=await api(action,coords);const assessment=result.record||result;$('distance').textContent=metres(assessment.distance_m??assessment.distanceMeters);$('gpsStatus').textContent=assessment.location_status||assessment.locationStatus;$('feedback').textContent=(result.message||'GPS test complete.')+' Estimated accuracy: '+metres(coords.accuracy)+(assessment.distance_m!=null||assessment.distanceMeters!=null?'; distance '+metres(assessment.distance_m??assessment.distanceMeters):'; no office reference configured.');$('feedback').className='notice';if(action!=='attendance-location-test')await refresh()}catch(e){notice('feedback',e.message,true)}finally{b.disabled=false}}
+async function locateAndSend(action){
+ const b=$(action==='attendance-location-test'?'gpsTest':action==='attendance-checkin'?'checkin':'checkout');b.disabled=true;
+ notice('feedback','Requesting precise location from your device…');
+ try{
+  const coords=await gps();$('accuracy').textContent=metres(coords.accuracy);
+  const result=await api(action,coords),assessment=result.record||result,distance=assessment.distance_m??assessment.distanceMeters;
+  $('distance').textContent=metres(distance);$('gpsStatus').textContent=assessment.location_status||assessment.locationStatus;
+  const label=action==='attendance-location-test'?'GPS location captured':action==='attendance-checkin'?'Sign In Successful':'Sign Out Successful';
+  const summary=label+'. '+(result.message||'')+(distance!=null?' Distance from office: '+metres(distance)+'.':'')+' GPS accuracy: '+metres(coords.accuracy)+'.';
+  if(action!=='attendance-location-test')await refresh();notice('feedback',summary);
+ }catch(e){$('gpsStatus').textContent='Not verified';notice('feedback',(action==='attendance-location-test'?'Location test failed: ':action==='attendance-checkout'?'Sign Out Failed: ':'Sign In Failed: ')+e.message,true)}
+ finally{b.disabled=false}
+}
+
+function dateKey(y,m,d){return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0')}
+function shiftMonth(by){const [y,m]=currentMonth.split('-').map(Number),next=new Date(Date.UTC(y,m-1+by,1));currentMonth=dateKey(next.getUTCFullYear(),next.getUTCMonth()+1,1).slice(0,7);$('calendarMonth').value=currentMonth;loadCalendar()}
+async function initCalendarMembers(){const r=await api('attendance-calendar-members'),dropdown=$('calendarMember'),old=dropdown.value;dropdown.innerHTML='<option value="">My attendance</option>'+r.members.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.name)+'</option>').join('');if(r.members.some(x=>x.id===old))dropdown.value=old;calendarMemberId=dropdown.value}
+async function loadCalendar(){try{const params={month:currentMonth};if(calendarMemberId)params.memberId=calendarMemberId;drawCalendar(await api('attendance-calendar',undefined,params))}catch(e){$('calendarSummary').textContent='Could not load attendance calendar: '+e.message}}
+function drawCalendar(d){
+ const [y,m]=d.month.split('-').map(Number),days=new Date(Date.UTC(y,m,0)).getUTCDate(),offset=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;
+ const records=new Map((d.records||[]).map(x=>[String(x.office_date).slice(0,10),x]));
+ const start=[d.approvedDate,d.liveSince].filter(Boolean).sort().at(-1)||null,weekdays=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+ const parts=weekdays.map(x=>'<div class="calendar-weekday" role="columnheader">'+x+'</div>');let present=0,absent=0,testRecords=0;
+ for(let i=0;i<offset;i++)parts.push('<div class="calendar-cell empty" aria-hidden="true"></div>');
+ for(let day=1;day<=days;day++){
+  const key=dateKey(y,m,day),weekday=new Date(Date.UTC(y,m-1,day)).getUTCDay(),activeDay=weekday>0&&weekday<6;
+  const rec=records.get(key),finished=key<d.officeDate||(key===d.officeDate&&d.officeMinutes>=960);
+  let state='neutral',label=activeDay?'Not due':'Closed';
+  if(rec){if(rec.is_test){state='test';label='Test';testRecords++}else{state='present';label='Signed In';present++}}
+  else if(d.liveMode&&activeDay&&start&&key>=start&&finished){state='absent';label='Absent';absent++}
+  else if(key===d.officeDate&&activeDay)label='Today';
+  parts.push('<div class="calendar-cell '+state+(key===d.officeDate?' today':'')+(!activeDay?' weekend':'')+'" role="gridcell" aria-label="'+key+': '+label+'" title="'+key+': '+label+'"><span class="day-num">'+day+'</span><span class="day-state">'+label+'</span></div>');
+ }
+ $('calendarGrid').innerHTML=parts.join('');
+ $('calendarSummary').textContent=d.memberName+' · '+new Date(Date.UTC(y,m-1,1)).toLocaleString('en-GB',{month:'long',year:'numeric',timeZone:'UTC'})+' · '+present+' signed in · '+absent+' absent'+(testRecords?' · '+testRecords+' test days':'');
+}
+$('calendarPrev').onclick=()=>shiftMonth(-1);$('calendarNext').onclick=()=>shiftMonth(1);$('calendarMonth').onchange=()=>{const value=$('calendarMonth').value;if(/^\d{4}-\d{2}$/.test(value)){currentMonth=value;loadCalendar()}};$('calendarMember').onchange=()=>{calendarMemberId=$('calendarMember').value;loadCalendar()};
+
 $('gpsTest').onclick=()=>locateAndSend('attendance-location-test');$('checkin').onclick=()=>locateAndSend('attendance-checkin');$('checkout').onclick=()=>locateAndSend('attendance-checkout');
 $('captureOffice').onclick=async()=>{try{notice('settingsMessage','Requesting office device location permission…');const c=await gps();$('officeLatitude').value=c.latitude;$('officeLongitude').value=c.longitude;notice('settingsMessage','Office coordinates captured with estimated accuracy '+metres(c.accuracy)+'. Review the location, then click Save office settings.')}catch(e){notice('settingsMessage',e.message,true)}};
 $('saveSettings').onclick=async()=>{try{const lat=$('officeLatitude').value,lng=$('officeLongitude').value;const payload={officeLatitude:lat===''?null:Number(lat),officeLongitude:lng===''?null:Number(lng),radiusMeters:Number($('radius').value),scheduleEnforced:$('scheduleEnforced').checked,testMode:$('testMode').checked};await api('attendance-settings',payload);notice('settingsMessage','Office settings saved for all members.');await refresh()}catch(e){notice('settingsMessage',e.message,true)}};
