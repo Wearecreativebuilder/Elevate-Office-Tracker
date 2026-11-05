@@ -128,6 +128,19 @@ good(await request('attendance-checkin',{method:'POST',cookie:aCookie,body:{lati
 good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{officeLatitude:6.5244,officeLongitude:3.3792,radiusMeters:150,testMode:true,scheduleEnforced:false}}),200,'Admin restores temporary GPS test mode');
 
 const adminInfo=await request('me',{cookie:aCookie});good(adminInfo,200,'Admin downlines updated');assert.equal(adminInfo.data.totalDownlines,1);
+
+assert.match(admin.data.member.sponsorCode,/^E2E-[0-9A-F]{12}$/,'Admin sponsor code begins with first name');
+assert.match(member.data.member.sponsorCode,/^E2E-[0-9A-F]{12}$/,'Member sponsor code begins with first name');
+const replacementEmail='elevate-e2e-friday-'+unique+'@example.invalid';
+const replacement=await request('register',{method:'POST',body:{name:'Friday Sponsor',email:replacementEmail,password,sponsorCode:admin.data.member.sponsorCode}});good(replacement,201,'New sponsor registered');
+assert.match(replacement.data.member.sponsorCode,/^FRIDAY-[0-9A-F]{12}$/);
+good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:replacement.data.member.id,rank:'Member',decision:'approved'}}),200,'Replacement sponsor approved');
+good(await request('sponsor',{method:'POST',cookie:mCookie,body:{sponsorCode:replacement.data.member.sponsorCode}}),200,'Member updates existing sponsor from dashboard');
+const switched=await request('me',{cookie:mCookie});good(switched,200,'Updated sponsor visible in member account');assert.equal(switched.data.sponsorName,'Friday Sponsor');
+good(await request('sponsor',{method:'POST',cookie:mCookie,body:{sponsorCode:member.data.member.sponsorCode}}),400,'Self sponsorship blocked');
+good(await request('sponsor',{method:'POST',cookie:mCookie,body:{sponsorCode:replacement.data.member.sponsorCode}}),409,'Duplicate sponsor change blocked');
+good(await request('sponsor',{method:'POST',cookie:aCookie,body:{sponsorCode:member.data.member.sponsorCode}}),409,'Circular sponsorship blocked');
+
 good(await request('logout',{method:'POST',cookie:mCookie}),200,'Member logout');
 const login=await request('login',{method:'POST',body:{email:email2,password}});good(login,200,'Member password login');
 good(await request('me',{cookie:login.cookie}),200,'Login session accesses personal records');
