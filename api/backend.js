@@ -243,7 +243,7 @@ export default async function handler(req,res){
    }catch(e){if(e.code==='23505')return fail(res,409,'A payment with this reference is already pending or approved.');throw e}
   }
   if(action==='office-financial-summary'&&req.method==='GET'){
-   if(roleDue(m.rank)===0)return fail(res,403,'Office finances are available to Distributor rank and above.');
+   if(!m.is_admin&&roleDue(m.rank)===0)return fail(res,403,'Office finances are available to Distributor rank and above.');
    const part=new Intl.DateTimeFormat('en-CA',{timeZone:'Africa/Lagos',year:'numeric',month:'2-digit'}).formatToParts(new Date());
    const year=part.find(x=>x.type==='year').value,month=part.find(x=>x.type==='month').value,period=year+'-'+month+'-01';
    const [r,ov,verified]=await Promise.all([
