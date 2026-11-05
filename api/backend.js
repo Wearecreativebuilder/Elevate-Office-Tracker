@@ -179,7 +179,7 @@ export default async function handler(req,res){
     if(!Number.isInteger(radius)||radius<20||radius>2000||typeof body.scheduleEnforced!=='boolean'||typeof body.testMode!=='boolean')return fail(res,400,'Set a radius of 20–2000 metres and valid attendance mode switches.');
     if(!body.testMode&&!coords)return fail(res,400,'Set the office GPS coordinates before enabling live attendance.');
     if(!body.testMode&&!body.scheduleEnforced)return fail(res,400,'Enable office hours when switching to live attendance.');
-    const updated=await db.query("update attendance_settings set office_lat=$1,office_lng=$2,radius_m=$3,schedule_enforced=$4,test_mode=$5,live_since=case when $5=false and $1 is not null and $2 is not null and live_since is null then (now() at time zone 'Africa/Lagos')::date else live_since end,updated_at=now(),updated_by=$6 where id=1 returning id",[coords?.lat??null,coords?.lng??null,radius,body.scheduleEnforced,body.testMode,uid]);
+    const updated=await db.query("update attendance_settings set office_lat=$1,office_lng=$2,radius_m=$3,schedule_enforced=$4,test_mode=$5,live_since=case when $5::boolean=false and $1::double precision is not null and $2::double precision is not null and live_since is null then (now() at time zone 'Africa/Lagos')::date else live_since end,updated_at=now(),updated_by=$6 where id=1 returning id",[coords?.lat??null,coords?.lng??null,radius,body.scheduleEnforced,body.testMode,uid]);
     if(!updated.rowCount)return fail(res,503,'Attendance settings unavailable.');
     return res.json({ok:true});
    }
