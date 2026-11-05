@@ -1,7 +1,7 @@
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import {SignJWT,jwtVerify} from 'jose';
-import {randomBytes,timingSafeEqual} from 'node:crypto';
+import {randomBytes,randomUUID,timingSafeEqual} from 'node:crypto';
 
 const {Pool}=pg;
 const KEY='elevate_session';
@@ -17,6 +17,7 @@ function makeCookie(token,maxAge){return KEY+'='+encodeURIComponent(token||'')+'
 async function session(req){const token=cookie(req);if(!token)return null;try{const {payload}=await jwtVerify(token,key(),{issuer:'elevate-office',audience:'members'});return payload.sub||null}catch{return null}}
 async function jwt(id){return await new SignJWT({}).setProtectedHeader({alg:'HS256'}).setIssuer('elevate-office').setAudience('members').setSubject(id).setIssuedAt().setExpirationTime('7d').sign(key())}
 function sanitize(m){return{id:m.id,name:m.name,email:m.email,phone:m.phone,rank:m.rank,isAdmin:m.is_admin,teamId:m.team_id,sponsorId:m.sponsor_id,sponsorCode:m.sponsor_code,approvalStatus:m.approval_status,createdAt:m.created_at}}
+function namedSponsorCode(name,id){const first=String(name).trim().replace(/^(Mr|Mrs|Ms|Dr|Prof)\\.?\\s+/i,'').split(/\\s+/)[0].replace(/[^A-Za-z0-9]/g,'').slice(0,7).toUpperCase()||'MEMBER';return first+'-'+id.replace(/-/g,'').slice(0,12).toUpperCase()}
 function roleDue(rank){return rank==='Member'?0:['Distributor','Manager'].includes(rank)?10000:['Senior Manager','Executive Manager','Director','Emirald Director'].includes(rank)?25000:null}
 function responsibility(expected,received){return expected===null?{status:'not_configured',required:false}:Number(expected)===0?{status:'exempt',required:false}:Number(received)>=Number(expected)?{status:'paid',required:true}:{status:Number(received)>0?'partially_paid':'due',required:true}}
 function validUrl(value){try{const u=new URL(value);return u.protocol==='https:'&&['fiverr.com','www.fiverr.com'].includes(u.hostname)&&/^\/[A-Za-z0-9_-]+\/?$/.test(u.pathname)}catch{return false}}
@@ -53,13 +54,13 @@ export default async function handler(req,res){
    if(adminRequested&&!admin)return fail(res,403,'An administrator already exists. Ask the administrator to grant access.');
    let sponsorId=null;
    if(body.sponsorCode){
-    const sponsor=await db.query("select id from members where sponsor_code=$1 and approval_status='approved'",[String(body.sponsorCode).toUpperCase().trim()]);
+    const sponsor=await db.query("select id from members where approval_status='approved' and (sponsor_code=$1 or id in (select member_id from sponsor_code_aliases where code=$1))",[String(body.sponsorCode).toUpperCase().trim()]);
     if(!sponsor.rowCount)return fail(res,400,'Sponsor code was not found.');
     sponsorId=sponsor.rows[0].id;
    }
-   const hash=await bcrypt.hash(password,12);
+   const hash=await bcrypt.hash(password,12),newId=randomUUID(),newSponsorCode=namedSponsorCode(name,newId);
    let created;
-   try{created=await db.query('insert into members(name,email,password_hash,sponsor_id,is_admin,approval_status) values ($1,$2,$3,$4,$5,$6) returning id,name,email,phone,rank,is_admin,team_id,sponsor_id,sponsor_code,approval_status,created_at',[name,email,hash,sponsorId,admin,admin?'approved':'pending'])}
+   try{created=await db.query('insert into members(id,name,email,password_hash,sponsor_id,is_admin,approval_status,sponsor_code) values ($1,$2,$3,$4,$5,$6,$7,$8) returning id,name,email,phone,rank,is_admin,team_id,sponsor_id,sponsor_code,approval_status,created_at',[newId,name,email,hash,sponsorId,admin,admin?'approved':'pending',newSponsorCode])}
    catch(e){if(e.code==='23505')return fail(res,409,'This email address is already registered.');throw e}
    if(admin)res.setHeader('Set-Cookie',makeCookie(await jwt(created.rows[0].id),604800));
    return res.status(201).json({member:sanitize(created.rows[0]),pendingApproval:!admin,message:admin?'Administrator account created.':'Registration submitted. An administrator must approve your account before you can sign in.'});
@@ -214,15 +215,31 @@ export default async function handler(req,res){
   }
   if(action==='fiverr-delete'&&req.method==='POST'){const id=String(body.id||'');if(!/^[0-9a-f-]{36}$/i.test(id))return fail(res,400,'Invalid account ID.');await db.query('delete from member_fiverr_accounts where id=$1 and member_id=$2',[id,uid]);return res.json({ok:true})}
   if(action==='sponsor'&&req.method==='POST'){
-   if(m.sponsor_id)return fail(res,409,'Sponsor is already assigned.');
-   const code=String(body.sponsorCode||'').trim().toUpperCase(),sponsor=await db.query("select id from members where sponsor_code=$1 and approval_status='approved'",[code]);
-   if(!sponsor.rowCount||sponsor.rows[0].id===uid)return fail(res,400,'Sponsor code invalid.');
-   const candidate=sponsor.rows[0].id;
-   const cyc=await db.query(`with recursive chain as (select id,sponsor_id,array[id] path from members where id=$1 union all select m.id,m.sponsor_id,chain.path||m.id from members m join chain on m.id=chain.sponsor_id where not m.id=any(chain.path)) select 1 from chain where id=$2 limit 1`,[candidate,uid]);
-   if(cyc.rowCount)return fail(res,400,'Circular sponsorship is not allowed.');
-   const changed=await db.query('update members set sponsor_id=$2 where id=$1 and sponsor_id is null returning id',[uid,candidate]);
-   if(!changed.rowCount)return fail(res,409,'Sponsor is already assigned.');
-   return res.json({ok:true});
+   const code=String(body.sponsorCode||'').trim().toUpperCase();
+   if(code.length<3||code.length>20)return fail(res,400,'Enter a valid sponsor code.');
+   const client=await db.connect();
+   try{
+    await client.query('begin');
+    // Serialize sponsorship changes to avoid simultaneous edits forming a referral loop.
+    await client.query('select pg_advisory_xact_lock(748201)');
+    const self=await client.query('select id,sponsor_id from members where id=$1 and approval_status=$2 for update',[uid,'approved']);
+    if(!self.rowCount){await client.query('rollback');return fail(res,403,'Approved account required.')}
+    const target=await client.query("select id,name from members where approval_status='approved' and (sponsor_code=$1 or id in (select member_id from sponsor_code_aliases where code=$1))",[code]);
+    if(!target.rowCount){await client.query('rollback');return fail(res,404,'Sponsor code was not found. Check the code and try again.')}
+    const candidate=target.rows[0];
+    if(candidate.id===uid){await client.query('rollback');return fail(res,400,'You cannot be your own sponsor.')}
+    if(self.rows[0].sponsor_id===candidate.id){await client.query('rollback');return fail(res,409,'This sponsor is already assigned to your account.')}
+    const cyc=await client.query(`with recursive chain as (
+     select id,sponsor_id,array[id] path from members where id=$1
+     union all
+     select m.id,m.sponsor_id,chain.path||m.id from members m join chain on m.id=chain.sponsor_id where not m.id=any(chain.path)
+    ) select 1 from chain where id=$2 limit 1`,[candidate.id,uid]);
+    if(cyc.rowCount){await client.query('rollback');return fail(res,409,'You cannot select one of your own downlines as sponsor.')}
+    await client.query('update members set sponsor_id=$2 where id=$1',[uid,candidate.id]);
+    await client.query('insert into sponsor_change_history(member_id,old_sponsor_id,new_sponsor_id) values($1,$2,$3)',[uid,self.rows[0].sponsor_id,candidate.id]);
+    await client.query('commit');
+    return res.json({ok:true,sponsorName:candidate.name,message:'Your sponsor has been updated successfully.'});
+   }catch(e){await client.query('rollback');throw e}finally{client.release()}
   }
 
   if(action==='my-due-submissions'&&req.method==='GET'){
