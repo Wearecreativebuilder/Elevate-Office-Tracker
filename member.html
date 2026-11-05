@@ -142,6 +142,71 @@ main{max-width:1260px!important;padding:36px clamp(18px,3vw,48px)!important}
 @media(min-width:761px){#siteHeader nav{display:flex!important}}
 @media(max-width:360px){.dashboard-shortcuts{grid-template-columns:1fr}}
 
+
+/* Mobile viewport containment — avoid side gaps caused by min-content grids and long values */
+html{width:100%;max-width:100%;overflow-x:clip}
+body{width:100%;max-width:100%;min-width:0!important;overflow-x:clip;margin:0}
+main,.main,.shell,#dashboard,#admin,#content,#memberFinance,.section,.layout,.twocol,.grid,.grid2,.cards,.stats,.panel,.card,.row,.tablewrap{min-width:0;max-width:100%;box-sizing:border-box}
+.shell{width:100%;grid-template-columns:minmax(0,235px) minmax(0,1fr)}
+.main,main{width:100%;min-width:0;box-sizing:border-box}
+.grid>*,.grid2>*,.cards>*,.stats>*,.twocol>*,.layout>*,.row>*,.flex>*,.top>*,.toolbar>*,.form>*,.fields>*,.panel>*,.card>*{min-width:0}
+.tablewrap{width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch}
+table{max-width:none}
+p,h1,h2,h3,label,.brand,.notice,.pill,.muted,.stat strong,.metric strong,.account,.calendar-summary{overflow-wrap:anywhere;word-break:normal}
+input,select,textarea{max-width:100%;min-width:0}
+img,svg,video,canvas{max-width:100%;height:auto}
+@media(max-width:900px){
+ .shell{display:block!important;width:100%;min-width:0}
+ .side{width:100%;min-width:0;max-width:100%;overflow-x:auto;overflow-y:hidden}
+ .side nav{min-width:0}
+ .main,main{width:100%;max-width:100%;margin-inline:auto}
+}
+@media(max-width:600px){
+ html,body{width:100%;max-width:100%;overflow-x:clip}
+ .main,main{padding-inline:12px!important}
+ .panel,.card,.metric,.stat{max-width:100%}
+ .grid,.grid2,.cards,.stats,.twocol,.layout,.form,.fields{width:100%;min-width:0}
+ .row,.top,.toolbar,.actions{max-width:100%;min-width:0}
+ .row>*,.top>*,.toolbar>*,.actions>*{max-width:100%;min-width:0}
+ .tablewrap{margin-inline:0!important}
+ #financeAccessMessage,#teamsAccessMessage{max-width:calc(100% - 24px);margin-inline:12px}
+ input,select,textarea{font-size:16px!important}
+}
+@media(max-width:360px){
+ .main,main{padding-inline:10px!important}
+ .panel,.card{padding:13px!important}
+ .grid,.cards,.stats{grid-template-columns:minmax(0,1fr)!important}
+ .top .actions{width:100%}
+}
+
+/* Member/admin mobile dashboard */
+#siteHeader{width:100%;max-width:100%;min-width:0}
+#siteHeader .brand{min-width:0;overflow-wrap:anywhere}
+#dashboard .card .row>div,#admin .card .row>div{min-width:0}
+#sponsorCodeDisplay{overflow-wrap:anywhere}
+#dashboard .grid2{grid-template-columns:repeat(2,minmax(0,1fr))}
+@media(max-width:760px){
+ #siteHeader{width:100%;max-width:100%;padding-inline:12px!important}
+ #siteHeader .brand{max-width:calc(100% - 110px)}
+ #siteHeader nav{max-width:calc(100vw - 20px);box-sizing:border-box}
+ #siteHeader .mobile-menu-toggle{min-width:88px;max-width:104px}
+ .dashboard-shortcuts{width:100%;max-width:100%}
+ #dashboard .grid2,#admin .grid2{grid-template-columns:minmax(0,1fr)!important}
+ #dashboard>.grid,#admin .grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ #dashboard .card,#admin .card{min-width:0}
+ #dailyAttendanceCard .grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+}
+@media(max-width:480px){
+ #dailyAttendanceCard .grid{grid-template-columns:minmax(0,1fr)!important}
+ #dashboard .grid,#admin .grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ #dashboard .row>button,#admin .row>button{max-width:100%}
+ #siteHeader .brand{font-size:clamp(12px,3.6vw,17px)!important}
+}
+@media(max-width:355px){
+ #dashboard .grid,#admin .grid{grid-template-columns:minmax(0,1fr)!important}
+ .dashboard-shortcuts{grid-template-columns:minmax(0,1fr)!important}
+}
+
 </style></head><body><header id="siteHeader"><div class="brand">◈ ELEVATE OFFICE TRACKING SYSTEM</div><button type="button" id="mobileMenuToggle" class="mobile-menu-toggle" aria-expanded="false" aria-controls="mobileNav" aria-label="Open navigation menu">☰ Menu</button><nav id="mobileNav" aria-label="Main navigation"><a href="./member.html">Dashboard</a><a href="./attendance.html">Attendance</a><a href="./index.html" id="navFinance" class="hidden">Finance</a><a href="./teams.html" id="navTeams" class="hidden">Teams</a></nav></header><main>
 <div class="row"><div><h1 id="dashboardTitle">My member dashboard</h1><p id="dashboardSubtitle">Secure office member access</p></div><button id="logout" class="hidden">Sign out</button></div>
 <div id="setup" class="notice warn hidden"><strong>Service temporarily unavailable.</strong> Please contact the office administrator or try signing in again later.</div>
