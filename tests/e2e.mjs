@@ -21,7 +21,7 @@ const health=await request('health');good(health,200,'Neon health');assert.equal
 good(await request('me'),401,'Anonymous access blocked');
 good(await request('admin-pending'),401,'Anonymous pending queue blocked');
 good(await request('login',{method:'POST',body:{email:'bad@example.invalid',password}}),401,'Unknown credentials rejected');
-const admin=await request('register',{method:'POST',body:{name:'E2E Test Admin',email:email1,password,adminSetupKey:adminKey}});
+const admin=await request('register',{method:'POST',body:{name:'E2E Test Admin',email:email1,password,officeStatus:'Member',adminSetupKey:adminKey}});
 good(admin,201,'Admin account registration');assert.equal(admin.data.member.isAdmin,true);
 const aCookie=admin.cookie;assert.ok(aCookie.includes('elevate_session='));
 good(await request('admin-directory'),401,'Anonymous office directory blocked');
@@ -29,10 +29,13 @@ good(await request('attendance-settings',{method:'POST',cookie:aCookie,body:{off
 
 const self=await request('me',{cookie:aCookie});good(self,200,'Admin session');assert.equal(self.data.member.rank,'Member');
 const team=await request('admin-team',{method:'POST',cookie:aCookie,body:{name:'E2E Test Team '+unique}});good(team,201,'Admin creates team');
-const member=await request('register',{method:'POST',body:{name:'E2E Test Member',email:email2,password,sponsorCode:admin.data.member.sponsorCode}});good(member,201,'Member account registration');
+const invalidStatusEmail='elevate-e2e-invalidstatus-'+unique+'@example.invalid';
+good(await request('register',{method:'POST',body:{name:'Missing Office Status',email:invalidStatusEmail,password}}),400,'Registration rejects missing office status');
+good(await request('register',{method:'POST',body:{name:'Invalid Office Status',email:invalidStatusEmail,password,officeStatus:'Administrator'}}),400,'Registration rejects unauthorized office status');
+const member=await request('register',{method:'POST',body:{name:'E2E Test Member',email:email2,password,officeStatus:'Distributor',sponsorCode:admin.data.member.sponsorCode}});good(member,201,'Member account registration');
 assert.equal(member.data.pendingApproval,true);assert.equal(member.data.member.approvalStatus,'pending');assert.equal(member.cookie,'');
 good(await request('login',{method:'POST',body:{email:email2,password}}),403,'Pending member cannot login');
-const queue=await request('admin-pending',{cookie:aCookie});good(queue,200,'Admin views pending applications');assert.ok(queue.data.requests.some(m=>m.id===member.data.member.id));
+const queue=await request('admin-pending',{cookie:aCookie});good(queue,200,'Admin views pending applications');assert.ok(queue.data.requests.some(m=>m.id===member.data.member.id));assert.equal(queue.data.requests.find(m=>m.id===member.data.member.id).requested_rank,'Distributor','Requested office status is shown to administrator');
 good(await request('admin-review',{method:'POST',body:{id:member.data.member.id,decision:'approved',rank:'Distributor'}}),401,'Anonymous approval blocked');
 good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved',rank:'Distributor'}}),200,'Admin approves new applicant');
 good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:member.data.member.id,decision:'approved'}}),409,'Duplicate approval blocked');
@@ -132,7 +135,7 @@ const adminInfo=await request('me',{cookie:aCookie});good(adminInfo,200,'Admin d
 assert.match(admin.data.member.sponsorCode,/^E2E-[0-9A-F]{12}$/,'Admin sponsor code begins with first name');
 assert.match(member.data.member.sponsorCode,/^E2E-[0-9A-F]{12}$/,'Member sponsor code begins with first name');
 const replacementEmail='elevate-e2e-friday-'+unique+'@example.invalid';
-const replacement=await request('register',{method:'POST',body:{name:'Friday Sponsor',email:replacementEmail,password,sponsorCode:admin.data.member.sponsorCode}});good(replacement,201,'New sponsor registered');
+const replacement=await request('register',{method:'POST',body:{name:'Friday Sponsor',email:replacementEmail,password,officeStatus:'Member',sponsorCode:admin.data.member.sponsorCode}});good(replacement,201,'New sponsor registered');
 assert.match(replacement.data.member.sponsorCode,/^FRIDAY-[0-9A-F]{12}$/);
 good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:replacement.data.member.id,rank:'Member',decision:'approved'}}),200,'Replacement sponsor approved');
 good(await request('sponsor',{method:'POST',cookie:mCookie,body:{sponsorCode:replacement.data.member.sponsorCode}}),200,'Member updates existing sponsor from dashboard');
@@ -145,7 +148,7 @@ good(await request('logout',{method:'POST',cookie:mCookie}),200,'Member logout')
 const login=await request('login',{method:'POST',body:{email:email2,password}});good(login,200,'Member password login');
 good(await request('me',{cookie:login.cookie}),200,'Login session accesses personal records');
 const rejectedEmail='elevate-e2e-rejected-'+unique+'@example.invalid';
-const rejected=await request('register',{method:'POST',body:{name:'Rejected Applicant',email:rejectedEmail,password}});good(rejected,201,'Additional member applies');
+const rejected=await request('register',{method:'POST',body:{name:'Rejected Applicant',email:rejectedEmail,password,officeStatus:'Member'}});good(rejected,201,'Additional member applies');
 good(await request('admin-review',{method:'POST',cookie:aCookie,body:{id:rejected.data.member.id,decision:'rejected'}}),200,'Admin rejects applicant');
 good(await request('login',{method:'POST',body:{email:rejectedEmail,password}}),403,'Rejected member cannot login');
 good(await request('profile',{method:'POST',cookie:login.cookie,origin:'https://untrusted.example',body:{name:'Injected',phone:''}}),403,'Cross-site POST blocked');
